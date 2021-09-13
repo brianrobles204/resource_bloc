@@ -14,9 +14,9 @@ void main() {
     InitialValue<String, _Value>? initialValue;
     FreshSource<String, _Value>? freshSource;
 
-    Duration? freshValueDuration;
-    Duration? truthReadDuration;
-    Duration? truthWriteDuration;
+    Duration? freshValueDelay;
+    Duration? truthReadDelay;
+    Duration? truthWriteDelay;
 
     var currentContent = 'content';
     final truthDB = <String, BehaviorSubject<_Value>>{};
@@ -32,8 +32,8 @@ void main() {
 
     void valueFreshSource() {
       freshSource = (key) async* {
-        if (freshValueDuration != null) {
-          await Future<void>.delayed(freshValueDuration!);
+        if (freshValueDelay != null) {
+          await Future<void>.delayed(freshValueDelay!);
         }
         yield createFreshValue(key);
       };
@@ -60,15 +60,15 @@ void main() {
         truthSource: TruthSource.from(
           reader: (key) async* {
             truthReadCount++;
-            if (truthReadDuration != null) {
-              await Future<void>.delayed(truthReadDuration!);
+            if (truthReadDelay != null) {
+              await Future<void>.delayed(truthReadDelay!);
             }
             yield* (truthDB[key] ??= BehaviorSubject());
           },
           writer: (key, value) async {
             truthWriteCount++;
-            if (truthWriteDuration != null) {
-              await Future<void>.delayed(truthWriteDuration!);
+            if (truthWriteDelay != null) {
+              await Future<void>.delayed(truthWriteDelay!);
             }
             (truthDB[key] ??= BehaviorSubject()).value = value;
           },
@@ -96,9 +96,9 @@ void main() {
       initialValue = null;
       freshSource = null;
 
-      freshValueDuration = null;
-      truthReadDuration = null;
-      truthWriteDuration = null;
+      freshValueDelay = null;
+      truthReadDelay = null;
+      truthWriteDelay = null;
 
       currentContent = 'content';
       truthDB.clear();
@@ -213,12 +213,12 @@ class _TestAction extends ResourceAction {
   _TestAction({
     required this.activeAction,
     required this.doneAction,
-    this.loadDuration,
+    this.loadDelay,
   });
 
   final String activeAction;
   final String doneAction;
-  final Duration? loadDuration;
+  final Duration? loadDelay;
 
   @override
   List<Object?> get props => [activeAction, doneAction];
@@ -242,8 +242,8 @@ class _TestResourceBloc extends CallbackResourceBloc<String, _Value> {
     if (action is _TestAction) {
       yield* mappedValue(
           (value) => value.copyWith(action: action.activeAction));
-      if (action.loadDuration != null) {
-        await Future<void>.delayed(action.loadDuration!);
+      if (action.loadDelay != null) {
+        await Future<void>.delayed(action.loadDelay!);
       }
       yield* mappedValue((value) => value.copyWith(action: action.doneAction));
     }
