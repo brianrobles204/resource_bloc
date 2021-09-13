@@ -28,6 +28,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   StreamSubscription<V>? _truthSubscription;
   StreamSubscription<V>? _freshSubscription;
+  StreamController<V>? _freshController;
   StreamController<ResourceAction>? _actionController;
   bool _isLoadingFresh = false;
 
@@ -72,12 +73,76 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   void _setUpTruthSubscription(K newKey) {
+    assert(_truthSubscription == null);
     _truthSubscription = readTruthSource(newKey).listen(
       (value) => add(_TruthValue(value)),
       onError: (error) => add(ErrorUpdate(error)),
       onDone: () => _valueLock.value = false,
       cancelOnError: true,
     );
+  }
+
+  void _setUpFreshSubscription(K key) {
+    assert(_freshSubscription == null);
+    assert(_freshController == null);
+    assert(_actionController == null);
+
+    _actionController = ReplaySubject();
+    final actionLock = Completer();
+    final actionStream = () async* {
+      await actionLock.future;
+      yield* transformActions(
+        _actionController!.stream,
+        mapActionToValue,
+      );
+    }();
+
+    _freshController = ReplaySubject();
+
+    void tryUnlockAction() {
+      if (!actionLock.isCompleted) {
+        _isLoadingFresh = false;
+        actionLock.complete();
+      }
+    }
+
+    if (!_isLoadingFresh) {
+      tryUnlockAction();
+    }
+
+    final freshActionStream = _freshController!.stream
+        .doOnData((_) => tryUnlockAction())
+        .mergeWith([actionStream]);
+
+    var hasEmittedValue = false;
+    _freshSubscription = freshActionStream.listen(
+      (value) async {
+        final latestValue = await truthValue;
+        if (value == latestValue && hasEmittedValue) return;
+        hasEmittedValue = true;
+        add(ValueUpdate(key, value));
+      },
+      onError: (Object error) => add(ErrorUpdate(error)),
+      onDone: () => _isLoadingFresh = false,
+      cancelOnError: true,
+    );
+  }
+
+  Future<void> _closeAllSubscriptions() async {
+    await _closeFreshSubscriptions();
+
+    await _truthSubscription?.cancel();
+    _truthSubscription = null;
+  }
+
+  Future<void> _closeFreshSubscriptions() async {
+    await _freshSubscription?.cancel();
+    await _freshController?.close();
+    await _actionController?.close();
+
+    _freshSubscription = null;
+    _freshController = null;
+    _actionController = null;
   }
 
   static ResourceState<K, V> _initialStateFor<K extends Object, V>(
@@ -131,10 +196,9 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   Stream<ResourceState<K, V>> _mapKeyUpdateToState(KeyUpdate<K> event) async* {
-    await _freshSubscription?.cancel();
-    await _truthSubscription?.cancel();
-
     if (key != event.key) {
+      await _closeAllSubscriptions();
+
       if (key != null || !state.hasError) {
         yield _initialStateFor(event.key, initialValue);
       } else {
@@ -159,8 +223,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   Stream<ResourceState<K, V>> _mapKeyErrorToState(KeyError event) async* {
-    await _freshSubscription?.cancel();
-    await _truthSubscription?.cancel();
+    await _closeAllSubscriptions();
 
     yield ResourceState.withError(
       event.error,
@@ -181,45 +244,12 @@ abstract class BaseResourceBloc<K extends Object, V>
 
     yield state.copyWith(isLoading: true);
 
-    await _freshSubscription?.cancel();
-    await _actionController?.close();
+    await _closeFreshSubscriptions();
+
     _isLoadingFresh = true;
+    _setUpFreshSubscription(key);
 
-    _actionController = ReplaySubject();
-    final actionLock = Completer();
-    final actionStream = () async* {
-      await actionLock.future;
-      yield* transformActions(
-        _actionController!.stream,
-        mapActionToValue,
-      );
-    }();
-
-    final freshActionStream = readFreshSource(key).doOnData(
-      (value) {
-        if (_isLoadingFresh) {
-          _isLoadingFresh = false;
-          actionLock.complete();
-        }
-      },
-    ).mergeWith([actionStream]);
-
-    var hasEmittedValue = false;
-    _freshSubscription = freshActionStream.listen(
-      (value) async {
-        final latestValue = await truthValue;
-        if (value == latestValue && hasEmittedValue) return;
-        hasEmittedValue = true;
-        add(ValueUpdate(key, value));
-      },
-      onError: (Object error) => add(ErrorUpdate(error)),
-      onDone: () {
-        _isLoadingFresh = false;
-        _freshSubscription = null;
-        _actionController = null;
-      },
-      cancelOnError: true,
-    );
+    _freshController!.addStream(readFreshSource(key));
   }
 
   Stream<ResourceState<K, V>> _mapValueUpdateToState(
@@ -245,9 +275,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   Stream<ResourceState<K, V>> _mapErrorUpdateToState(ErrorUpdate event) async* {
-    await _freshSubscription?.cancel();
-    await _truthSubscription?.cancel();
-
+    await _closeAllSubscriptions();
     yield state.copyWithError(event.error, isLoading: false);
   }
 
@@ -255,14 +283,21 @@ abstract class BaseResourceBloc<K extends Object, V>
     ResourceAction event,
   ) async* {
     if (_actionController == null) {
-      assert(() {
-        print('WARN: Tried to perform a resource action $event, '
-            'but no actions are being processed by the bloc. '
-            'Try setting a key and / or adding a Reload() event.');
-        return true;
-      }());
-      return;
+      final key = this.key;
+      final value = await truthValue;
+      if (key != null && value != null) {
+        _setUpFreshSubscription(key);
+      } else {
+        assert(() {
+          print('WARN: Tried to perform a resource action $event, '
+              'but no actions can be processed by the bloc. '
+              'Try setting a key and / or adding a Reload() event.');
+          return true;
+        }());
+        return;
+      }
     }
+
     _actionController!.sink.add(event);
   }
 
@@ -285,9 +320,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   @override
   Future<void> close() async {
-    await _freshSubscription?.cancel();
-    await _truthSubscription?.cancel();
-    await _actionController?.close();
+    await _closeAllSubscriptions();
     await _valueLock.close();
     return super.close();
   }
