@@ -120,7 +120,6 @@ void main() {
       });
 
       test('value changing events without a key do nothing', () async {
-        // ignore: unawaited_futures
         expectLater(bloc.stream, emitsDone);
 
         bloc.reload();
@@ -187,7 +186,6 @@ void main() {
         currentContent = 'first-ready';
         setUpBloc();
 
-        // ignore: unawaited_futures
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -222,7 +220,6 @@ void main() {
         initialKey = 'first';
         setUpBloc();
 
-        // ignore: unawaited_futures
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -257,7 +254,6 @@ void main() {
       currentContent = 'first';
       setUpBloc();
 
-      // ignore: unawaited_futures
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[

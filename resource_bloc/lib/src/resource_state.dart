@@ -8,41 +8,32 @@ class ResourceState<K extends Object, V> extends Equatable {
         source = null,
         error = null;
 
-  ResourceState.loading(K key)
+  ResourceState.loading(K this.key)
       : isLoading = true,
-        key = key,
         value = null,
         source = null,
         error = null;
 
   ResourceState.withValue(
-    K key,
-    V value, {
+    K this.key,
+    V this.value, {
     required this.isLoading,
-    required Source source,
-  })  : value = value,
-        source = source,
-        key = key,
-        error = null;
+    required Source this.source,
+  }) : error = null;
 
   ResourceState.withError(
-    Object error, {
+    Object this.error, {
     required this.key,
     required this.isLoading,
-  })  : error = error,
-        value = null,
+  })  : value = null,
         source = null;
 
   ResourceState.loadingWithValueAndError(
-    K key,
-    V value,
-    Object error, {
-    required Source source,
-  })  : isLoading = true,
-        key = key,
-        value = value,
-        source = source,
-        error = error;
+    K this.key,
+    V this.value,
+    Object this.error, {
+    required Source this.source,
+  }) : isLoading = true;
 
   ResourceState._raw(
     this.key,
