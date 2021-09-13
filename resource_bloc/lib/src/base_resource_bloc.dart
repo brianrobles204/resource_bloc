@@ -28,8 +28,8 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   StreamSubscription<V>? _truthSubscription;
   StreamSubscription<V>? _freshSubscription;
-  StreamController<V>? _freshController;
   StreamController<ResourceAction>? _actionController;
+  final _freshSource = BehaviorSubject<Stream<V>>();
   bool _isLoadingFresh = false;
 
   final _valueLock = BehaviorSubject.seeded(false);
@@ -84,7 +84,6 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   void _setUpFreshSubscription(K key) {
     assert(_freshSubscription == null);
-    assert(_freshController == null);
     assert(_actionController == null);
 
     _actionController = ReplaySubject();
@@ -97,8 +96,6 @@ abstract class BaseResourceBloc<K extends Object, V>
       );
     }();
 
-    _freshController = ReplaySubject();
-
     void tryUnlockAction() {
       if (!actionLock.isCompleted) {
         _isLoadingFresh = false;
@@ -110,7 +107,8 @@ abstract class BaseResourceBloc<K extends Object, V>
       tryUnlockAction();
     }
 
-    final freshActionStream = _freshController!.stream
+    final freshActionStream = SwitchLatestStream(_freshSource)
+        .asBroadcastStream()
         .doOnData((_) => tryUnlockAction())
         .mergeWith([actionStream]);
 
@@ -133,16 +131,17 @@ abstract class BaseResourceBloc<K extends Object, V>
 
     await _truthSubscription?.cancel();
     _truthSubscription = null;
+    if (!_valueLock.isClosed) _valueLock.value = false;
   }
 
   Future<void> _closeFreshSubscriptions() async {
     await _freshSubscription?.cancel();
-    await _freshController?.close();
     await _actionController?.close();
+    if (!_freshSource.isClosed) _freshSource.value = Stream.empty();
 
     _freshSubscription = null;
-    _freshController = null;
     _actionController = null;
+    _isLoadingFresh = false;
   }
 
   static ResourceState<K, V> _initialStateFor<K extends Object, V>(
@@ -233,6 +232,16 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   Stream<ResourceState<K, V>> _mapReloadToState() async* {
+    if (_freshSubscription != null && _isLoadingFresh) {
+      assert(() {
+        print('INFO: Tried to reload while already reloading. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
+
+    await _untilValueUnlocked();
+
     final key = this.key;
     if (key == null) {
       assert(() {
@@ -245,11 +254,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     yield state.copyWith(isLoading: true);
 
     await _closeFreshSubscriptions();
-
     _isLoadingFresh = true;
     _setUpFreshSubscription(key);
 
-    _freshController!.addStream(readFreshSource(key));
+    _freshSource.value = readFreshSource(key);
   }
 
   Stream<ResourceState<K, V>> _mapValueUpdateToState(
@@ -321,6 +329,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   @override
   Future<void> close() async {
     await _closeAllSubscriptions();
+    await _freshSource.close();
     await _valueLock.close();
     return super.close();
   }

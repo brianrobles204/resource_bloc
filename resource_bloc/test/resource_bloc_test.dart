@@ -14,9 +14,14 @@ void main() {
     InitialValue<String, _Value>? initialValue;
     FreshSource<String, _Value>? freshSource;
 
-    Duration? freshValueDelay;
-    Duration? truthReadDelay;
-    Duration? truthWriteDelay;
+    BehaviorSubject<bool> freshValueLocked = BehaviorSubject.seeded(false);
+    BehaviorSubject<bool> truthReadLocked = BehaviorSubject.seeded(false);
+    BehaviorSubject<bool> truthWriteLocked = BehaviorSubject.seeded(false);
+    bool isUnlocked(bool isLocked) => !isLocked;
+
+    BehaviorSubject<Object?> freshValueThrowable = BehaviorSubject.seeded(null);
+    BehaviorSubject<Object?> truthReadThrowable = BehaviorSubject.seeded(null);
+    BehaviorSubject<Object?> truthWriteThrowable = BehaviorSubject.seeded(null);
 
     var currentContent = 'content';
     final truthDB = <String, BehaviorSubject<_Value>>{};
@@ -34,16 +39,21 @@ void main() {
 
     void valueFreshSource() {
       freshSource = (key) async* {
-        if (freshValueDelay != null) {
-          await Future<void>.delayed(freshValueDelay!);
+        if (freshValueLocked.value) {
+          await freshValueLocked.firstWhere(isUnlocked);
+        }
+        if (freshValueThrowable.value != null) {
+          throw freshValueThrowable.value!;
         }
         yield createFreshValue(key);
       };
     }
 
-    StreamSink<_Value> streamFreshSource() {
-      final sink = BehaviorSubject<_Value>();
-      freshSource = (key) => sink;
+    StreamSink<String Function(String)> streamFreshSource() {
+      final sink = BehaviorSubject<String Function(String)>();
+      freshSource = (key) => sink.map(
+            (callback) => createFreshValue(key, content: callback(key)),
+          );
       return sink;
     }
 
@@ -62,15 +72,21 @@ void main() {
         truthSource: TruthSource.from(
           reader: (key) async* {
             truthReadCount++;
-            if (truthReadDelay != null) {
-              await Future<void>.delayed(truthReadDelay!);
+            if (truthReadLocked.value) {
+              await truthReadLocked.firstWhere(isUnlocked);
+            }
+            if (truthReadThrowable.value != null) {
+              throw truthReadThrowable.value!;
             }
             yield* (truthDB[key] ??= BehaviorSubject());
           },
           writer: (key, value) async {
             truthWriteCount++;
-            if (truthWriteDelay != null) {
-              await Future<void>.delayed(truthWriteDelay!);
+            if (truthWriteLocked.value) {
+              await truthWriteLocked.firstWhere(isUnlocked);
+            }
+            if (truthWriteThrowable.value != null) {
+              throw truthWriteThrowable.value!;
             }
             (truthDB[key] ??= BehaviorSubject()).value = value;
           },
@@ -96,9 +112,13 @@ void main() {
       initialValue = null;
       freshSource = null;
 
-      freshValueDelay = null;
-      truthReadDelay = null;
-      truthWriteDelay = null;
+      freshValueLocked.value = false;
+      truthReadLocked.value = false;
+      truthWriteLocked.value = false;
+
+      freshValueThrowable.value = null;
+      truthReadThrowable.value = null;
+      truthWriteThrowable.value = null;
 
       currentContent = 'content';
       truthDB.clear();
@@ -249,33 +269,169 @@ void main() {
       });
     });
 
-    test('.reload() reloads the bloc', () async {
-      initialKey = 'key';
-      currentContent = 'first';
-      setUpBloc();
+    group('.reload()', () {
+      test('reloads the bloc', () async {
+        initialKey = 'key';
+        currentContent = 'first';
+        setUpBloc();
 
-      expectLater(
-        bloc.stream,
-        emitsInOrder(<dynamic>[
-          isStateWhere(isLoading: true, key: 'key', value: isNull),
-          isStateWith(isLoading: false, content: 'first'),
-          isStateWith(isLoading: true, content: 'first'),
-          isStateWith(isLoading: false, content: 'second'),
-          isStateWith(isLoading: true, content: 'second'),
-          isStateWith(isLoading: false, content: 'third'),
-        ]),
-      );
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            isStateWith(isLoading: false, content: 'first'),
+            isStateWith(isLoading: true, content: 'first'),
+            isStateWith(isLoading: false, content: 'second'),
+            isStateWith(isLoading: true, content: 'second'),
+            isStateWith(isLoading: false, content: 'third'),
+          ]),
+        );
 
-      bloc.reload();
-      await untilDone(bloc);
+        bloc.reload();
+        await untilDone(bloc);
 
-      currentContent = 'second';
-      bloc.reload();
+        currentContent = 'second';
+        bloc.reload();
 
-      await untilDone(bloc);
+        await untilDone(bloc);
 
-      currentContent = 'third';
-      bloc.reload();
+        currentContent = 'third';
+        bloc.reload();
+      });
+
+      test('after key error does nothing', () async {
+        initialKey = 'key';
+        currentContent = 'first';
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            isStateWith(isLoading: false, content: 'first'),
+            isKeyErrorState,
+            emitsDone,
+          ]),
+        );
+
+        bloc.reload();
+        await untilDone(bloc);
+
+        bloc.add(KeyError(StateError('test key error')));
+        await pumpEventQueue();
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        bloc.close();
+      });
+
+      test('while already reloading does nothing', () async {
+        initialKey = 'key';
+        currentContent = 'first';
+        freshValueLocked.value = true;
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            isStateWith(isLoading: false, content: 'first', count: 1),
+            emitsDone,
+          ]),
+        );
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        bloc.reload();
+        await pumpEventQueue();
+        freshValueLocked.value = false;
+
+        await untilDone(bloc);
+        bloc.close();
+      });
+
+      test('after first value in fresh stream starts a new load', () async {
+        initialKey = 'first';
+        final firstSink = streamFreshSource();
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(isLoading: true, key: 'first', value: isNull),
+            isStateWith(
+                isLoading: false, content: 'first-a', source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'first-b', source: Source.fresh),
+            isStateWith(
+                isLoading: true, content: 'first-b', source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'first-x', source: Source.fresh),
+          ]),
+        );
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        firstSink.add((key) => '$key-a');
+        await pumpEventQueue();
+
+        firstSink.add((key) => '$key-b');
+        await untilDone(bloc);
+
+        final secondSink = streamFreshSource();
+
+        bloc.reload(); // Listening for second sink now
+        await pumpEventQueue();
+
+        firstSink.add((key) => '$key-c');
+        await pumpEventQueue();
+
+        secondSink.add((key) => '$key-x');
+        await pumpEventQueue();
+      });
+
+      test('after error starts a new load', () async {
+        initialKey = 'first';
+        currentContent = 'success';
+        freshValueThrowable.value = StateError('test error');
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(
+                isLoading: true, key: 'first', error: isNull, value: isNull),
+            isStateWhere(
+                isLoading: false,
+                key: 'first',
+                error: isStateError,
+                value: isNull),
+            isStateWhere(
+                isLoading: true,
+                key: 'first',
+                error: isStateError,
+                value: isNull),
+            isStateWith(
+                isLoading: false,
+                key: 'first',
+                content: 'success',
+                error: isNull),
+          ]),
+        );
+
+        bloc.reload();
+        await untilDone(bloc);
+
+        freshValueThrowable.value = null;
+        bloc.reload();
+      });
+
+      test('while waiting for truth source emits starts a new load', () {
+        //
+      });
     });
 
     test('passes fresh source errors to the state', () {});
@@ -374,6 +530,9 @@ Future<void> untilDone(ResourceBloc bloc) =>
     bloc.stream.firstWhere((state) => !state.isLoading);
 
 final Matcher isInitialState = equals(ResourceState<String, _Value>.initial());
+
+final Matcher isKeyErrorState = isStateWhere(
+    isLoading: false, key: isNull, value: isNull, error: isStateError);
 
 Matcher isStateWith({
   bool? isLoading,
