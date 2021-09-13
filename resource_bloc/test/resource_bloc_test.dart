@@ -15,8 +15,9 @@ void main() {
     var currentContent = 'content';
     final truthDB = <String, BehaviorSubject<_Value>>{};
 
-    _Value createFreshValue(String key, [String? content]) =>
-        _Value(key, content ?? currentContent, freshReadCount++);
+    _Value createFreshValue(String key, {String? content, String? action}) =>
+        _Value(key, freshReadCount++,
+            content: content ?? currentContent, action: action);
 
     void valueFreshSource() {
       freshSource = (key) => Stream.value(createFreshValue(key));
@@ -33,7 +34,7 @@ void main() {
         valueFreshSource();
       }
 
-      return ResourceBloc.from(
+      return _TestResourceBloc(
         initialKey: initialKey,
         initialValue: initialValue,
         freshSource: (key) => freshSource!(key),
@@ -176,12 +177,78 @@ void main() {
   });
 }
 
+class _TestAction extends ResourceAction {
+  _TestAction({
+    required this.activeAction,
+    required this.doneAction,
+    this.loadDuration,
+  });
+
+  final String activeAction;
+  final String doneAction;
+  final Duration? loadDuration;
+
+  @override
+  List<Object?> get props => [activeAction, doneAction];
+}
+
+class _TestResourceBloc extends CallbackResourceBloc<String, _Value> {
+  _TestResourceBloc({
+    required FreshSource<String, _Value> freshSource,
+    required TruthSource<String, _Value> truthSource,
+    InitialValue<String, _Value>? initialValue,
+    String? initialKey,
+  }) : super(
+          freshSource: freshSource,
+          truthSource: truthSource,
+          initialValue: initialValue,
+          initialKey: initialKey,
+        );
+
+  @override
+  Stream<_Value> mapActionToValue(ResourceAction action) async* {
+    if (action is _TestAction) {
+      yield* mappedValue(
+          (value) => value.copyWith(action: action.activeAction));
+      if (action.loadDuration != null) {
+        await Future<void>.delayed(action.loadDuration!);
+      }
+      yield* mappedValue((value) => value.copyWith(action: action.doneAction));
+    }
+  }
+}
+
 class _Value {
-  _Value(this.name, this.content, this.count);
+  _Value(
+    this.name,
+    this.count, {
+    required this.content,
+    required this.action,
+  });
 
   final String name;
-  final String content;
   final int count;
+  final String content;
+  final String? action;
+
+  static const _kPreserveField = r'_$PRESERVE_FIELD';
+
+  _Value copyWith({
+    String? name,
+    int? count,
+    String? content,
+    String? action = _kPreserveField,
+  }) =>
+      _Value(
+        name ?? this.name,
+        count ?? this.count,
+        content: content ?? this.content,
+        action: action != _kPreserveField ? action : this.action,
+      );
+
+  @override
+  String toString() =>
+      '_Value(name=$name, count=$count, content=$content, action=$action)';
 }
 
 Future<void> untilDone(Stream<ResourceState> stream) =>
@@ -298,28 +365,45 @@ Matcher isValueWith({
   String? name,
   String? content,
   int? count,
+  Object? action,
 }) =>
-    predicate(
-      (value) {
-        bool isValidValue(_Value value) {
-          final isValidName = name == null || value.name == name;
-          final isValidContent = content == null || value.content == content;
-          final isValidCount = count == null || value.count == count;
-          return isValidName && isValidContent && isValidCount;
-        }
+    _ValueMatcher(name, content, count, action);
 
-        if (value is _Value) {
-          return isValidValue(value);
-        } else if (value is ResourceState<String, _Value>) {
-          return value.hasValue && isValidValue(value.requireValue);
-        } else {
-          return false;
-        }
-      },
-      'Value ' +
-          [
-            if (name != null) 'with name of $name',
-            if (content != null) 'with content of $content',
-            if (count != null) 'with count of $count',
-          ].join(', '),
-    );
+class _ValueMatcher extends Matcher {
+  _ValueMatcher(this.name, this.content, this.count, this.action);
+
+  final String? name;
+  final String? content;
+  final int? count;
+  final Object? action;
+
+  @override
+  bool matches(item, Map matchState) {
+    bool isValidValue(_Value value) {
+      final isValidName = name == null || value.name == name;
+      final isValidContent = content == null || value.content == content;
+      final isValidCount = count == null || value.count == count;
+      final isValidAction = action == null ||
+          wrapMatcher(action).matches(value.action, matchState);
+      return isValidName && isValidContent && isValidCount && isValidAction;
+    }
+
+    if (item is _Value) {
+      return isValidValue(item);
+    } else if (item is ResourceState<String, _Value>) {
+      return item.hasValue && isValidValue(item.requireValue);
+    } else {
+      return false;
+    }
+  }
+
+  @override
+  Description describe(Description description) {
+    return description.addAll('Value(', ', ', ')', [
+      if (name != null) 'name=$name',
+      if (content != null) 'content=$content',
+      if (count != null) 'count=$count',
+      if (action != null) wrapMatcher(action),
+    ]);
+  }
+}

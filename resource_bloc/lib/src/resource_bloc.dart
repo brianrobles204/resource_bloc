@@ -14,7 +14,7 @@ abstract class ResourceBloc<K extends Object, V> extends BaseResourceBloc<K, V>
     required TruthSource<K, V> truthSource,
     InitialValue<K, V>? initialValue,
     K? initialKey,
-  }) = _CallbackResourceBloc;
+  }) = CallbackResourceBloc;
 }
 
 mixin ReloadResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
@@ -60,9 +60,9 @@ mixin CallbackResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
       truthSource.write(key, value);
 }
 
-class _CallbackResourceBloc<K extends Object, V> extends ResourceBloc<K, V>
+class CallbackResourceBloc<K extends Object, V> extends ResourceBloc<K, V>
     with CallbackResourceBlocMixin<K, V> {
-  _CallbackResourceBloc({
+  CallbackResourceBloc({
     required this.freshSource,
     required this.truthSource,
     this.initialValue,
