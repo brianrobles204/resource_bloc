@@ -90,7 +90,13 @@ abstract class BaseResourceBloc<K extends Object, V>
       final value = () {
         try {
           return initialValue?.call(key);
-        } catch (e) {
+        } catch (e, s) {
+          assert(() {
+            print('WARN: Initial value callback threw on key \'$key\'. '
+                'Ignoring initial value. Error: $e');
+            print(s);
+            return true;
+          }());
           return null;
         }
       }();
