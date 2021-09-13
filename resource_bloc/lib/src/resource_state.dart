@@ -4,21 +4,15 @@ class ResourceState<K extends Object, V> extends Equatable {
   ResourceState.initial()
       : isLoading = true,
         key = null,
-        hasKey = false,
-        hasValue = false,
         value = null,
         source = null,
-        hasError = false,
         error = null;
 
   ResourceState.loading(K key)
       : isLoading = true,
         key = key,
-        hasKey = true,
-        hasValue = false,
         value = null,
         source = null,
-        hasError = false,
         error = null;
 
   ResourceState.withValue(
@@ -29,9 +23,6 @@ class ResourceState<K extends Object, V> extends Equatable {
   })  : value = value,
         source = source,
         key = key,
-        hasKey = true,
-        hasValue = true,
-        hasError = false,
         error = null;
 
   ResourceState.withError(
@@ -39,9 +30,6 @@ class ResourceState<K extends Object, V> extends Equatable {
     required this.key,
     required this.isLoading,
   })  : error = error,
-        hasError = true,
-        hasKey = key != null,
-        hasValue = false,
         value = null,
         source = null;
 
@@ -50,36 +38,31 @@ class ResourceState<K extends Object, V> extends Equatable {
     V value,
     Object error, {
     required Source source,
-  })  : key = key,
+  })  : isLoading = true,
+        key = key,
         value = value,
-        isLoading = true,
         source = source,
-        error = error,
-        hasKey = true,
-        hasValue = true,
-        hasError = true;
+        error = error;
 
   ResourceState._raw(
     this.key,
     this.value,
     this.error, {
-    required this.isLoading,
     required this.source,
-  })  : hasKey = key != null,
-        hasValue = source != null,
-        hasError = error != null;
-
-  final bool hasKey;
-  final K? key;
+    required this.isLoading,
+  });
 
   final bool isLoading;
 
-  final bool hasValue;
+  final K? key;
+  bool get hasKey => key != null;
+
   final V? value;
   final Source? source;
+  bool get hasValue => source != null;
 
-  final bool hasError;
   final Object? error;
+  bool get hasError => error != null;
 
   ResourceState<K, N> map<N>(N Function(V value) callback) =>
       ResourceState._raw(
@@ -136,13 +119,10 @@ class ResourceState<K extends Object, V> extends Equatable {
 
   @override
   String toString() => '$runtimeType('
-      'hasKey=$hasKey, '
-      'key=$key, '
       'isLoading=$isLoading, '
-      'hasValue=$hasValue, '
+      'key=$key, '
       'value=$value, '
       'source=$source, '
-      'hasError=$hasError, '
       'error=$error'
       ')';
 }
