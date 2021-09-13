@@ -2,12 +2,12 @@ import 'base_resource_bloc.dart';
 import 'resource_event.dart';
 import 'truth_source.dart';
 
-typedef InitialValue<K extends Object, V> = V Function(K key);
 typedef FreshSource<K extends Object, V> = Stream<V> Function(K key);
 
 abstract class ResourceBloc<K extends Object, V> extends BaseResourceBloc<K, V>
     with ReloadResourceBlocMixin<K, V>, KeySetterResourceBlocMixin<K, V> {
-  ResourceBloc({K? initialKey}) : super(initialKey: initialKey);
+  ResourceBloc({K? initialKey, InitialValue<K, V>? initialValue})
+      : super(initialKey: initialKey, initialValue: initialValue);
 
   factory ResourceBloc.from({
     required FreshSource<K, V> freshSource,
@@ -42,12 +42,8 @@ mixin KeySetterResourceBlocMixin<K extends Object, V>
 }
 
 mixin CallbackResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
-  InitialValue<K, V>? get initialValue;
   FreshSource<K, V> get freshSource;
   TruthSource<K, V> get truthSource;
-
-  @override
-  V? getInitialValue(K key) => initialValue?.call(key);
 
   @override
   Stream<V> readFreshSource(K key) => freshSource(key);
@@ -65,12 +61,12 @@ class CallbackResourceBloc<K extends Object, V> extends ResourceBloc<K, V>
   CallbackResourceBloc({
     required this.freshSource,
     required this.truthSource,
-    this.initialValue,
     K? initialKey,
-  }) : super(initialKey: initialKey);
-
-  @override
-  final InitialValue<K, V>? initialValue;
+    InitialValue<K, V>? initialValue,
+  }) : super(
+          initialKey: initialKey,
+          initialValue: initialValue,
+        );
 
   @override
   final FreshSource<K, V> freshSource;

@@ -7,14 +7,24 @@ import 'package:rxdart/rxdart.dart';
 import 'resource_event.dart';
 import 'resource_state.dart';
 
+typedef InitialValue<K extends Object, V> = V? Function(K key);
+
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
-  BaseResourceBloc({K? initialKey})
-      : super(
-          initialKey != null
-              ? ResourceState.loading(initialKey)
-              : ResourceState.initial(),
-        );
+  BaseResourceBloc({
+    K? initialKey,
+    this.initialValue,
+  }) : super(_initialStateFor(initialKey, initialValue)) {
+    if (initialKey != null) {
+      _setUpTruthSubscription(initialKey);
+    }
+  }
+
+  final InitialValue<K, V>? initialValue;
+
+  K? get key => state.key;
+
+  V? get value => state.value;
 
   StreamSubscription<V>? _truthSubscription;
   StreamSubscription<V>? _freshSubscription;
@@ -25,18 +35,11 @@ abstract class BaseResourceBloc<K extends Object, V>
   Future<void> _untilValueUnlocked() =>
       _valueLock.firstWhere((isLocked) => !isLocked);
 
-  K? get key => state.key;
-
-  V? get value => state.value;
-
   @protected
   Future<V?> get truthValue async {
     await _untilValueUnlocked();
     return state.value;
   }
-
-  @protected
-  V? getInitialValue(K key);
 
   @protected
   Stream<V> readFreshSource(K key);
@@ -68,13 +71,37 @@ abstract class BaseResourceBloc<K extends Object, V>
     // NO OP
   }
 
-  void _setupTruthSubscription(K newKey) {
+  void _setUpTruthSubscription(K newKey) {
     _truthSubscription = readTruthSource(newKey).listen(
       (value) => add(_TruthValue(value)),
       onError: (error) => add(ErrorUpdate(error)),
       onDone: () => _valueLock.value = false,
       cancelOnError: true,
     );
+  }
+
+  static ResourceState<K, V> _initialStateFor<K extends Object, V>(
+    K? key,
+    InitialValue<K, V>? initialValue,
+  ) {
+    if (key == null) {
+      return ResourceState.initial();
+    } else {
+      final value = () {
+        try {
+          return initialValue?.call(key);
+        } catch (e) {
+          return null;
+        }
+      }();
+
+      if (value != null) {
+        return ResourceState.withValue(key, value,
+            isLoading: true, source: Source.fresh);
+      } else {
+        return ResourceState.loading(key);
+      }
+    }
   }
 
   @override
@@ -103,15 +130,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
     if (key != event.key) {
       if (key != null || !state.hasError) {
-        final initialValue = getInitialValue(event.key);
-        yield initialValue != null
-            ? ResourceState.withValue(
-                event.key,
-                initialValue,
-                isLoading: true,
-                source: Source.fresh,
-              )
-            : ResourceState.loading(event.key);
+        yield _initialStateFor(event.key, initialValue);
       } else {
         // Previously with key error. Emit the prior error but with the new key.
         yield ResourceState.withError(
@@ -121,9 +140,15 @@ abstract class BaseResourceBloc<K extends Object, V>
         );
       }
 
-      _setupTruthSubscription(event.key);
+      _setUpTruthSubscription(event.key);
 
       add(Reload());
+    } else {
+      assert(() {
+        print('INFO: Tried to update key, but the new key \'${event.key}\' '
+            'matches the current key. Doing nothing.');
+        return true;
+      }());
     }
   }
 
@@ -140,7 +165,13 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   Stream<ResourceState<K, V>> _mapReloadToState() async* {
     final key = this.key;
-    if (key == null) return;
+    if (key == null) {
+      assert(() {
+        print('WARN: Tried to reload, but no key is set. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
 
     yield state.copyWith(isLoading: true);
 
@@ -188,13 +219,20 @@ abstract class BaseResourceBloc<K extends Object, V>
   Stream<ResourceState<K, V>> _mapValueUpdateToState(
     ValueUpdate<K, V> event,
   ) async* {
-    if (key != event.key) return;
+    if (key != event.key) {
+      assert(() {
+        print('WARN: Tried to update value, but the current key \'$key\' does '
+            'not match the value update key \'${event.key}\'. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
 
     await _untilValueUnlocked();
     _valueLock.value = true;
 
     if (_truthSubscription == null) {
-      _setupTruthSubscription(event.key);
+      _setUpTruthSubscription(event.key);
     }
 
     await writeTruthSource(event.key, event.value);
@@ -210,7 +248,15 @@ abstract class BaseResourceBloc<K extends Object, V>
   Stream<ResourceState<K, V>> _mapResourceActionToState(
     ResourceAction event,
   ) async* {
-    if (_actionController == null) return;
+    if (_actionController == null) {
+      assert(() {
+        print('WARN: Tried to perform a resource action $event, '
+            'but no actions are being processed by the bloc. '
+            'Try setting a key and / or adding a Reload() event.');
+        return true;
+      }());
+      return;
+    }
     _actionController!.sink.add(event);
   }
 

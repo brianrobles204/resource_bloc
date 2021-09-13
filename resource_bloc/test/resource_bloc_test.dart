@@ -21,6 +21,8 @@ void main() {
     var currentContent = 'content';
     final truthDB = <String, BehaviorSubject<_Value>>{};
 
+    late ResourceBloc<String, _Value> bloc;
+
     _Value createFreshValue(
       String key, {
       int? count,
@@ -76,8 +78,6 @@ void main() {
       );
     }
 
-    late ResourceBloc<String, _Value> bloc;
-
     /// Replace the current bloc with a newly created bloc.
     ///
     /// This is useful if the initial arguments for the bloc have changed and
@@ -111,48 +111,145 @@ void main() {
       truthDB.clear();
     });
 
-    test('starts with initial state and no reads', () {
-      expect(bloc.state, isInitialState);
-      expect(freshReadCount, equals(0));
-      expect(truthReadCount, equals(0));
-      expect(truthWriteCount, equals(0));
+    group('initial conditions:', () {
+      test('starts with initial state and no reads', () {
+        expect(bloc.state, isInitialState);
+        expect(freshReadCount, equals(0));
+        expect(truthReadCount, equals(0));
+        expect(truthWriteCount, equals(0));
+      });
+
+      test('value changing events without a key do nothing', () async {
+        // ignore: unawaited_futures
+        expectLater(bloc.stream, emitsDone);
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        bloc.add(ValueUpdate('key', createFreshValue('key')));
+        await pumpEventQueue();
+
+        bloc.add(_TestAction(activeAction: 'active', doneAction: 'done'));
+        await pumpEventQueue();
+
+        await bloc.close();
+
+        expect(bloc.state, isInitialState);
+        expect(freshReadCount, equals(0));
+        expect(truthReadCount, equals(0));
+        expect(truthWriteCount, equals(0));
+      });
+
+      test('setting the initial key reflects in the initial state', () {
+        initialKey = 'first';
+        setUpBloc();
+
+        final isInitialLoadingState =
+            isStateWhere(key: 'first', isLoading: true, value: isNull);
+
+        expect(bloc.state, isInitialLoadingState);
+        expect(freshReadCount, equals(0));
+        expect(truthReadCount, equals(0));
+        expect(truthWriteCount, equals(0));
+
+        bloc.reload();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState,
+            isStateWith(isLoading: false, name: 'first', count: 1),
+          ]),
+        );
+      });
     });
 
-    test('setting the initial key reflects in the initial state', () {
-      initialKey = 'first';
-      setUpBloc();
+    group('initial values:', () {
+      test('null result should emit loading state with no value', () {
+        initialValue = (key) => null;
+        initialKey = 'first';
+        setUpBloc();
 
-      final isInitialLoadingState =
-          isStateWhere(key: 'first', isLoading: true, value: isNull);
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(key: 'first', isLoading: true, value: isNull),
+            isStateWith(isLoading: false, name: 'first', count: 1),
+          ]),
+        );
 
-      expect(bloc.state, isInitialLoadingState);
-      expect(freshReadCount, equals(0));
-      expect(truthReadCount, equals(0));
-      expect(truthWriteCount, equals(0));
+        bloc.reload();
+      });
 
-      bloc.reload();
+      test('non-null result should reflect in state', () async {
+        initialValue = (key) => createFreshValue(key, content: '$key-loading');
+        initialKey = 'first';
+        currentContent = 'first-ready';
+        setUpBloc();
 
-      expectLater(
-        bloc.stream,
-        emitsInOrder(<dynamic>[
-          isInitialLoadingState,
-          isStateWith(isLoading: false, name: 'first', count: 1),
-        ]),
-      );
-    });
+        // ignore: unawaited_futures
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWith(
+                isLoading: true, name: 'first', content: 'first-loading'),
+            isStateWith(
+                isLoading: false, name: 'first', content: 'first-ready'),
+            isStateWith(
+                isLoading: true, name: 'second', content: 'second-loading'),
+            isStateWith(
+                isLoading: false, name: 'second', content: 'second-ready'),
+          ]),
+        );
 
-    test('.reload() without a key does nothing', () async {
-      // ignore: unawaited_futures
-      expectLater(bloc.stream, emitsDone);
+        bloc.reload();
+        await untilDone(bloc);
 
-      bloc.reload();
-      await pumpEventQueue();
+        currentContent = 'second-ready';
+        bloc.key = 'second';
+      });
 
-      await bloc.close();
-      expect(bloc.state, isInitialState);
-      expect(freshReadCount, equals(0));
-      expect(truthReadCount, equals(0));
-      expect(truthWriteCount, equals(0));
+      test('errors in initial values should be ignored', () async {
+        var shouldThrow = true;
+        initialValue = (key) {
+          if (shouldThrow) {
+            throw StateError('initial value error');
+          } else {
+            return createFreshValue(key, content: '$key-loading');
+          }
+        };
+        currentContent = 'first-ready';
+        initialKey = 'first';
+        setUpBloc();
+
+        // ignore: unawaited_futures
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWhere(isLoading: true, key: 'first', value: isNull),
+            isStateWith(
+                isLoading: false, name: 'first', content: 'first-ready'),
+            isStateWhere(isLoading: true, key: 'second', value: isNull),
+            isStateWith(
+                isLoading: false, name: 'second', content: 'second-ready'),
+            isStateWith(
+                isLoading: true, name: 'third', content: 'third-loading'),
+            isStateWith(
+                isLoading: false, name: 'third', content: 'third-ready'),
+          ]),
+        );
+
+        bloc.reload();
+        await untilDone(bloc);
+
+        currentContent = 'second-ready';
+        bloc.key = 'second';
+        await untilDone(bloc);
+
+        shouldThrow = false;
+        currentContent = 'third-ready';
+        bloc.key = 'third';
+      });
     });
 
     test('.reload() reloads the bloc', () async {
@@ -174,22 +271,16 @@ void main() {
       );
 
       bloc.reload();
-      await untilDone(bloc.stream);
+      await untilDone(bloc);
 
       currentContent = 'second';
       bloc.reload();
 
-      await untilDone(bloc.stream);
+      await untilDone(bloc);
 
       currentContent = 'third';
       bloc.reload();
     });
-
-    test('null initial values should return loading state', () {});
-
-    test('non-null initial values should reflect in state', () {});
-
-    test('errors in initial values should be ignored', () {});
 
     test('passes fresh source errors to the state', () {});
 
@@ -283,8 +374,8 @@ class _Value {
       '_Value(name=$name, count=$count, content=$content, action=$action)';
 }
 
-Future<void> untilDone(Stream<ResourceState> stream) =>
-    stream.firstWhere((state) => !state.isLoading);
+Future<void> untilDone(ResourceBloc bloc) =>
+    bloc.stream.firstWhere((state) => !state.isLoading);
 
 final Matcher isInitialState = equals(ResourceState<String, _Value>.initial());
 
