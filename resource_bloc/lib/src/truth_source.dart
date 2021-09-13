@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'base_resource_bloc.dart';
-
 abstract class TruthSource<K extends Object, V> {
   TruthSource();
 
@@ -12,15 +10,14 @@ abstract class TruthSource<K extends Object, V> {
 
   factory TruthSource.noop() = _NoopTruthSource;
 
-  Stream<Result<V>> read(K key);
-  Future<void> write(K key, V value, DateTime date);
+  Stream<V> read(K key);
+  Future<void> write(K key, V value);
 }
 
-typedef TruthReader<K extends Object, V> = Stream<Result<V>> Function(K key);
+typedef TruthReader<K extends Object, V> = Stream<V> Function(K key);
 typedef TruthWriter<K extends Object, V> = Future<void> Function(
   K key,
   V value,
-  DateTime date,
 );
 
 class CallbackTruthSource<K extends Object, V> extends TruthSource<K, V> {
@@ -30,23 +27,22 @@ class CallbackTruthSource<K extends Object, V> extends TruthSource<K, V> {
   final TruthWriter<K, V> writer;
 
   @override
-  Stream<Result<V>> read(K key) => reader(key);
+  Stream<V> read(K key) => reader(key);
 
   @override
-  Future<void> write(K key, V value, DateTime date) => writer(key, value, date);
+  Future<void> write(K key, V value) => writer(key, value);
 }
 
 class _NoopTruthSource<K extends Object, V> extends TruthSource<K, V> {
-  final StreamController<Result<V>> _controller = StreamController.broadcast();
+  final StreamController<V> _controller = StreamController.broadcast();
   K? _currentKey;
 
   @override
-  Stream<Result<V>> read(K key) =>
-      _controller.stream.where((_) => key == _currentKey);
+  Stream<V> read(K key) => _controller.stream.where((_) => key == _currentKey);
 
   @override
-  Future<void> write(K key, V value, DateTime date) async {
+  Future<void> write(K key, V value) async {
     _currentKey = key;
-    _controller.sink.add(Result(value, date));
+    _controller.sink.add(value);
   }
 }

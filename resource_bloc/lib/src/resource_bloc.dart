@@ -53,11 +53,11 @@ mixin CallbackResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
   Stream<V> readFreshSource(K key) => freshSource(key);
 
   @override
-  Stream<Result<V>> readTruthSource(K key) => truthSource.read(key);
+  Stream<V> readTruthSource(K key) => truthSource.read(key);
 
   @override
-  Future<void> writeTruthSource(K key, V value, DateTime date) =>
-      truthSource.write(key, value, date);
+  Future<void> writeTruthSource(K key, V value) =>
+      truthSource.write(key, value);
 }
 
 class _CallbackResourceBloc<K extends Object, V> extends ResourceBloc<K, V>

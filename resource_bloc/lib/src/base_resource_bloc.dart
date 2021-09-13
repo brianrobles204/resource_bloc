@@ -1,22 +1,11 @@
 import 'dart:async';
 
 import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart';
 import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'resource_event.dart';
 import 'resource_state.dart';
-
-class Result<V> extends Equatable {
-  Result(this.value, this.date);
-
-  final V value;
-  final DateTime date;
-
-  @override
-  List<Object?> get props => [value, date];
-}
 
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
@@ -27,7 +16,7 @@ abstract class BaseResourceBloc<K extends Object, V>
               : ResourceState.initial(),
         );
 
-  StreamSubscription<Result<V>>? _truthSubscription;
+  StreamSubscription<V>? _truthSubscription;
   StreamSubscription<V>? _freshSubscription;
   StreamController<ResourceAction>? _actionController;
   bool _isLoadingFresh = false;
@@ -53,10 +42,10 @@ abstract class BaseResourceBloc<K extends Object, V>
   Stream<V> readFreshSource(K key);
 
   @protected
-  Stream<Result<V>> readTruthSource(K key);
+  Stream<V> readTruthSource(K key);
 
   @protected
-  Future<void> writeTruthSource(K key, V value, DateTime date);
+  Future<void> writeTruthSource(K key, V value);
 
   @protected
   Stream<V> mappedValue(V Function(V value) mapper) async* {
@@ -81,7 +70,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   void _setupTruthSubscription(K newKey) {
     _truthSubscription = readTruthSource(newKey).listen(
-      (result) => add(_TruthValue(result.value, result.date)),
+      (value) => add(_TruthValue(value)),
       onError: (error) => add(ErrorUpdate(error)),
       onDone: () => _valueLock.value = false,
       cancelOnError: true,
@@ -121,7 +110,6 @@ abstract class BaseResourceBloc<K extends Object, V>
                 initialValue,
                 isLoading: true,
                 source: Source.fresh,
-                date: DateTime.now(),
               )
             : ResourceState.loading(event.key);
       } else {
@@ -209,7 +197,7 @@ abstract class BaseResourceBloc<K extends Object, V>
       _setupTruthSubscription(event.key);
     }
 
-    await writeTruthSource(event.key, event.value, DateTime.now());
+    await writeTruthSource(event.key, event.value);
   }
 
   Stream<ResourceState<K, V>> _mapErrorUpdateToState(ErrorUpdate event) async* {
@@ -230,7 +218,6 @@ abstract class BaseResourceBloc<K extends Object, V>
     if (_isLoadingFresh) {
       yield state.copyWithValue(
         event.value,
-        date: event.date,
         source: Source.cache,
       );
     } else {
@@ -239,7 +226,6 @@ abstract class BaseResourceBloc<K extends Object, V>
         event.value,
         isLoading: false,
         source: Source.fresh,
-        date: event.date,
       );
     }
     _valueLock.value = false;
@@ -260,10 +246,9 @@ abstract class BaseResourceBloc<K extends Object, V>
 /// Private to avoid spoofing of truth value. Only the truth source can
 /// emit this event.
 class _TruthValue<V> extends ResourceEvent {
-  _TruthValue(this.value, this.date);
+  _TruthValue(this.value);
 
   final V value;
-  final DateTime date;
 
   @override
   List<Object?> get props => [value];

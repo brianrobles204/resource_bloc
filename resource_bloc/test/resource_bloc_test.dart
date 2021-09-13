@@ -13,7 +13,7 @@ void main() {
     InitialValue<String, _Value>? initialValue;
     FreshSource<String, _Value>? freshSource;
     var currentContent = 'content';
-    final truthDB = <String, BehaviorSubject<Result<_Value>>>{};
+    final truthDB = <String, BehaviorSubject<_Value>>{};
 
     _Value createFreshValue(String key, [String? content]) =>
         _Value(key, content ?? currentContent, freshReadCount++);
@@ -42,9 +42,9 @@ void main() {
             truthReadCount++;
             return truthDB[key] ??= BehaviorSubject();
           },
-          writer: (key, value, date) async {
+          writer: (key, value) async {
             truthWriteCount++;
-            (truthDB[key] ??= BehaviorSubject()).value = Result(value, date);
+            (truthDB[key] ??= BehaviorSubject()).value = value;
           },
         ),
       );
@@ -197,7 +197,6 @@ Matcher isStateWith({
   int? count,
   Object? error,
   Source? source,
-  DateTime? date,
 }) =>
     isStateWhere(
       isLoading: isLoading,
@@ -207,7 +206,6 @@ Matcher isStateWith({
           : null,
       error: error,
       source: source,
-      date: date,
     );
 
 Matcher isStateWhere({
@@ -216,9 +214,8 @@ Matcher isStateWhere({
   Object? value,
   Object? error,
   Source? source,
-  DateTime? date,
 }) =>
-    _ResourceStateMatcher(isLoading, key, value, error, source, date);
+    _ResourceStateMatcher(isLoading, key, value, error, source);
 
 class _ResourceStateMatcher extends Matcher {
   _ResourceStateMatcher(
@@ -227,7 +224,6 @@ class _ResourceStateMatcher extends Matcher {
     this.valueMatcher,
     this.errorMatcher,
     this.source,
-    this.date,
   );
 
   final bool? isLoading;
@@ -235,7 +231,6 @@ class _ResourceStateMatcher extends Matcher {
   final Object? valueMatcher;
   final Object? errorMatcher;
   final Source? source;
-  final DateTime? date;
 
   @override
   bool matches(dynamic item, Map matchState) {
@@ -247,17 +242,14 @@ class _ResourceStateMatcher extends Matcher {
           wrapMatcher(valueMatcher).matches(item.value, matchState);
       final isValidError = errorMatcher == null ||
           wrapMatcher(errorMatcher).matches(item.error, matchState);
-      final isValidSource = source == null ||
-          (item.hasValue && item.requireInfo.source == source);
-      final isValidDate =
-          date == null || (item.hasValue && item.requireInfo.date == date);
+      final isValidSource =
+          source == null || (item.hasValue && item.requireSource == source);
 
       return isValidLoading &&
           isValidKey &&
           isValidValue &&
           isValidError &&
-          isValidSource &&
-          isValidDate;
+          isValidSource;
     } else {
       return false;
     }
@@ -288,18 +280,9 @@ class _ResourceStateMatcher extends Matcher {
       description.add('value matches ').addDescriptionOf(valueMatcher);
     }
 
-    if (source != null || date != null) {
+    if (source != null) {
       separate();
-      description.add('having value ');
-
-      if (source != null) {
-        description.add('with source $source');
-      }
-
-      if (date != null) {
-        if (source != null) separate();
-        description.add('with date $date');
-      }
+      description.add('with source $source');
     }
 
     if (errorMatcher != null) {

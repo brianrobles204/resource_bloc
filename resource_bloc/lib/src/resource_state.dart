@@ -7,7 +7,7 @@ class ResourceState<K extends Object, V> extends Equatable {
         hasKey = false,
         hasValue = false,
         value = null,
-        info = null,
+        source = null,
         hasError = false,
         error = null;
 
@@ -17,7 +17,7 @@ class ResourceState<K extends Object, V> extends Equatable {
         hasKey = true,
         hasValue = false,
         value = null,
-        info = null,
+        source = null,
         hasError = false,
         error = null;
 
@@ -26,9 +26,8 @@ class ResourceState<K extends Object, V> extends Equatable {
     V value, {
     required this.isLoading,
     required Source source,
-    required DateTime date,
   })  : value = value,
-        info = ValueInfo._(source, date),
+        source = source,
         key = key,
         hasKey = true,
         hasValue = true,
@@ -44,18 +43,17 @@ class ResourceState<K extends Object, V> extends Equatable {
         hasKey = key != null,
         hasValue = false,
         value = null,
-        info = null;
+        source = null;
 
   ResourceState.loadingWithValueAndError(
     K key,
     V value,
     Object error, {
     required Source source,
-    required DateTime date,
   })  : key = key,
         value = value,
         isLoading = true,
-        info = ValueInfo._(source, date),
+        source = source,
         error = error,
         hasKey = true,
         hasValue = true,
@@ -66,9 +64,9 @@ class ResourceState<K extends Object, V> extends Equatable {
     this.value,
     this.error, {
     required this.isLoading,
-    required this.info,
+    required this.source,
   })  : hasKey = key != null,
-        hasValue = info != null,
+        hasValue = source != null,
         hasError = error != null;
 
   final bool hasKey;
@@ -78,7 +76,7 @@ class ResourceState<K extends Object, V> extends Equatable {
 
   final bool hasValue;
   final V? value;
-  final ValueInfo? info;
+  final Source? source;
 
   final bool hasError;
   final Object? error;
@@ -89,7 +87,7 @@ class ResourceState<K extends Object, V> extends Equatable {
         hasValue ? callback(value as V) : null,
         error,
         isLoading: isLoading,
-        info: hasValue ? info : null,
+        source: hasValue ? source : null,
       );
 
   ResourceState<K, V> copyWith({
@@ -102,13 +100,12 @@ class ResourceState<K extends Object, V> extends Equatable {
         includeValue ? value : null,
         includeError ? error : null,
         isLoading: isLoading ?? this.isLoading,
-        info: includeValue ? info : null,
+        source: includeValue ? source : null,
       );
 
   ResourceState<K, V> copyWithValue(
     V value, {
     required Source source,
-    required DateTime date,
     bool? isLoading,
     bool includeError = true,
   }) =>
@@ -117,7 +114,7 @@ class ResourceState<K extends Object, V> extends Equatable {
         value,
         includeError ? error : null,
         isLoading: isLoading ?? this.isLoading,
-        info: ValueInfo._(source, date),
+        source: source,
       );
 
   ResourceState<K, V> copyWithError(
@@ -130,12 +127,12 @@ class ResourceState<K extends Object, V> extends Equatable {
         includeValue ? value : null,
         error,
         isLoading: isLoading ?? this.isLoading,
-        info: includeValue ? info : null,
+        source: includeValue ? source : null,
       );
 
   @override
   List<Object?> get props =>
-      [isLoading, hasValue, value, info, hasError, error];
+      [isLoading, hasValue, value, source, hasError, error];
 
   @override
   String toString() => '$runtimeType('
@@ -144,26 +141,13 @@ class ResourceState<K extends Object, V> extends Equatable {
       'isLoading=$isLoading, '
       'hasValue=$hasValue, '
       'value=$value, '
-      'info=$info, '
+      'source=$source, '
       'hasError=$hasError, '
       'error=$error'
       ')';
 }
 
 enum Source { fresh, cache }
-
-class ValueInfo extends Equatable {
-  ValueInfo._(this.source, this.date);
-
-  final Source source;
-  final DateTime date;
-
-  @override
-  List<Object?> get props => [source, date];
-
-  @override
-  bool? get stringify => true;
-}
 
 extension ResourceStateRequireExtensions<K extends Object, V>
     on ResourceState<K, V> {
@@ -175,9 +159,9 @@ extension ResourceStateRequireExtensions<K extends Object, V>
     }
   }
 
-  ValueInfo get requireInfo {
+  Source get requireSource {
     if (hasValue) {
-      return info!;
+      return source!;
     } else {
       throw StateError('$this has no value, and no source');
     }
