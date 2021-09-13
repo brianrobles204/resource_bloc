@@ -9,18 +9,34 @@ void main() {
     var freshReadCount = 0;
     var truthReadCount = 0;
     var truthWriteCount = 0;
+
     String? initialKey;
     InitialValue<String, _Value>? initialValue;
     FreshSource<String, _Value>? freshSource;
+
+    Duration? freshValueDuration;
+    Duration? truthReadDuration;
+    Duration? truthWriteDuration;
+
     var currentContent = 'content';
     final truthDB = <String, BehaviorSubject<_Value>>{};
 
-    _Value createFreshValue(String key, {String? content, String? action}) =>
-        _Value(key, freshReadCount++,
+    _Value createFreshValue(
+      String key, {
+      int? count,
+      String? content,
+      String? action,
+    }) =>
+        _Value(key, count ?? freshReadCount,
             content: content ?? currentContent, action: action);
 
     void valueFreshSource() {
-      freshSource = (key) => Stream.value(createFreshValue(key));
+      freshSource = (key) async* {
+        if (freshValueDuration != null) {
+          await Future<void>.delayed(freshValueDuration!);
+        }
+        yield createFreshValue(key);
+      };
     }
 
     StreamSink<_Value> streamFreshSource() {
@@ -37,14 +53,23 @@ void main() {
       return _TestResourceBloc(
         initialKey: initialKey,
         initialValue: initialValue,
-        freshSource: (key) => freshSource!(key),
+        freshSource: (key) {
+          freshReadCount++;
+          return freshSource!(key);
+        },
         truthSource: TruthSource.from(
-          reader: (key) {
+          reader: (key) async* {
             truthReadCount++;
-            return truthDB[key] ??= BehaviorSubject();
+            if (truthReadDuration != null) {
+              await Future<void>.delayed(truthReadDuration!);
+            }
+            yield* (truthDB[key] ??= BehaviorSubject());
           },
           writer: (key, value) async {
             truthWriteCount++;
+            if (truthWriteDuration != null) {
+              await Future<void>.delayed(truthWriteDuration!);
+            }
             (truthDB[key] ??= BehaviorSubject()).value = value;
           },
         ),
@@ -66,11 +91,18 @@ void main() {
       freshReadCount = 0;
       truthReadCount = 0;
       truthWriteCount = 0;
+
       initialKey = null;
       initialValue = null;
       freshSource = null;
+
+      freshValueDuration = null;
+      truthReadDuration = null;
+      truthWriteDuration = null;
+
       currentContent = 'content';
       truthDB.clear();
+
       bloc = createBloc();
     });
 
@@ -104,7 +136,7 @@ void main() {
         bloc.stream,
         emitsInOrder(<dynamic>[
           isInitialLoadingState,
-          isStateWith(isLoading: false, name: 'first', count: 0),
+          isStateWith(isLoading: false, name: 'first', count: 1),
         ]),
       );
     });
@@ -330,10 +362,10 @@ class _ResourceStateMatcher extends Matcher {
       needsSeparator = true;
     }
 
-    description.add('Resource State ');
+    description.add('ResourceState(');
 
     if (isLoading != null) {
-      description.add(isLoading! ? 'is loading' : 'not loading');
+      description.add('isLoading=$isLoading');
       needsSeparator = true;
     }
 
@@ -356,6 +388,8 @@ class _ResourceStateMatcher extends Matcher {
       separate();
       description.addDescriptionOf(errorMatcher);
     }
+
+    description.add(')');
 
     return description;
   }
