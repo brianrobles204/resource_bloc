@@ -50,8 +50,8 @@ void main() {
     }
 
     StreamSink<String Function(String)> streamFreshSource() {
-      final sink = BehaviorSubject<String Function(String)>();
-      freshSource = (key) => sink.map(
+      final sink = StreamController<String Function(String)>.broadcast();
+      freshSource = (key) => sink.stream.map(
             (callback) => createFreshValue(key, content: callback(key)),
           );
       return sink;
@@ -570,11 +570,62 @@ void main() {
     });
 
     group('error updates', () {
-      test('pass fresh source errors to the state', () {});
+      test('do not erase existing data', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWith(isLoading: false, content: 'key-a', count: 1),
+            // reload but throws on read
+            isStateWith(isLoading: true, content: 'key-a', count: 1),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(content: 'key-a', count: 1),
+                error: isStateError),
+            // reload, returns successfully but then emits error
+            isStateWhere(
+                isLoading: true,
+                value: isValueWith(content: 'key-a', count: 1),
+                error: isStateError),
+            isStateWith(isLoading: false, content: 'key-b', count: 3),
+            isStateWith(isLoading: false, content: 'key-c', count: 3),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(content: 'key-c', count: 3),
+                error: isStateError),
+          ]),
+        );
 
-      test('pass truth source errors to the state', () {});
+        var freshSink = streamFreshSource();
 
-      test('do not erase existing data', () {});
+        bloc.key = 'key';
+        await pumpEventQueue();
+        freshSink.add((key) => '$key-a');
+        await pumpEventQueue();
+
+        // reload, but throws on read
+        bloc.reload();
+        await pumpEventQueue();
+        freshSink.add((key) => throw StateError('error'));
+        await pumpEventQueue();
+
+        // reload, returns successfully, but then emits an error
+        bloc.reload();
+        await pumpEventQueue();
+        freshSink.add((key) => '$key-b');
+        await pumpEventQueue();
+        freshSink.add((key) => '$key-c');
+        await pumpEventQueue();
+        freshSink.add((key) => throw StateError('error 2'));
+      });
+
+      test('pass early truth reading errors to the state', () {});
+
+      test('pass subsequent truth reading errors to the state', () {});
+
+      test('pass truth writing errors to the state', () {});
+
+      test('cancel further fresh or truth updates', () {});
     });
 
     test('handles changes in keys', () {});
