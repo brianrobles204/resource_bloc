@@ -131,7 +131,7 @@ void main() {
       truthDB.clear();
     });
 
-    group('initial conditions:', () {
+    group('initial state', () {
       test('starts with initial state and no reads', () {
         expect(bloc.state, isInitialState);
         expect(freshReadCount, equals(0));
@@ -139,7 +139,7 @@ void main() {
         expect(truthWriteCount, equals(0));
       });
 
-      test('value changing events without a key do nothing', () async {
+      test('without key does not change after value changing events', () async {
         expectLater(bloc.stream, emitsDone);
 
         bloc.reload();
@@ -159,7 +159,7 @@ void main() {
         expect(truthWriteCount, equals(0));
       });
 
-      test('setting the initial key reflects in the initial state', () {
+      test('reflects the initial key if provided', () {
         initialKey = 'first';
         setUpBloc();
 
@@ -183,8 +183,8 @@ void main() {
       });
     });
 
-    group('initial values:', () {
-      test('null result should emit loading state with no value', () {
+    group('initial value callback', () {
+      test('returning null should emit loading state with no value', () {
         initialValue = (key) => null;
         initialKey = 'first';
         setUpBloc();
@@ -200,7 +200,7 @@ void main() {
         bloc.reload();
       });
 
-      test('non-null result should reflect in state', () async {
+      test('returning non-null value should reflect in state', () async {
         initialValue = (key) => createFreshValue(key, content: '$key-loading');
         initialKey = 'first';
         currentContent = 'first-ready';
@@ -227,7 +227,7 @@ void main() {
         bloc.key = 'second';
       });
 
-      test('errors in initial values should be ignored', () async {
+      test('errors should be ignored', () async {
         var shouldThrow = true;
         initialValue = (key) {
           if (shouldThrow) {
@@ -429,7 +429,7 @@ void main() {
         bloc.reload();
       });
 
-      test('while waiting for truth source read starts a new load', () async {
+      test('during truth source read waits then starts a new load', () async {
         initialKey = 'first';
         currentContent = 'x';
         truthReadLocked.value = true;
@@ -466,7 +466,7 @@ void main() {
         await pumpEventQueue();
       });
 
-      test('while waiting for truth source write starts a new load', () async {
+      test('during truth source write waits then starts a new load', () async {
         initialKey = 'first';
         currentContent = 'x';
         truthWriteLocked.value = true;
@@ -504,11 +504,17 @@ void main() {
       });
     });
 
-    test('passes fresh source errors to the state', () {});
+    group('value updates', () {
+      //
+    });
 
-    test('passes truth source errors to the state', () {});
+    group('error updates', () {
+      test('pass fresh source errors to the state', () {});
 
-    test('error updates do not erase existing data', () {});
+      test('pass truth source errors to the state', () {});
+
+      test('do not erase existing data', () {});
+    });
 
     test('handles changes in keys', () {});
 
