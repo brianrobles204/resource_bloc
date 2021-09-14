@@ -429,8 +429,78 @@ void main() {
         bloc.reload();
       });
 
-      test('while waiting for truth source emits starts a new load', () {
-        //
+      test('while waiting for truth source read starts a new load', () async {
+        initialKey = 'first';
+        currentContent = 'x';
+        truthReadLocked.value = true;
+        setUpBloc();
+
+        final isInitialLoadingState =
+            isStateWhere(isLoading: true, key: 'first', value: isNull);
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState,
+            isStateWith(
+                isLoading: false, content: 'x', count: 1, source: Source.fresh),
+            isStateWith(
+                isLoading: true, content: 'x', count: 1, source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'y', count: 2, source: Source.fresh),
+          ]),
+        );
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState);
+
+        currentContent = 'y';
+        bloc.reload();
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState);
+
+        truthReadLocked.value = false;
+        await pumpEventQueue();
+      });
+
+      test('while waiting for truth source write starts a new load', () async {
+        initialKey = 'first';
+        currentContent = 'x';
+        truthWriteLocked.value = true;
+        setUpBloc();
+
+        final isInitialLoadingState =
+            isStateWhere(isLoading: true, key: 'first', value: isNull);
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState,
+            isStateWith(
+                isLoading: false, content: 'x', count: 1, source: Source.fresh),
+            isStateWith(
+                isLoading: true, content: 'x', count: 1, source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'y', count: 2, source: Source.fresh),
+          ]),
+        );
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState);
+
+        currentContent = 'y';
+        bloc.reload();
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState);
+
+        truthWriteLocked.value = false;
+        await pumpEventQueue();
       });
     });
 
