@@ -44,14 +44,6 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   V? get value => state.value;
 
-  StreamSubscription<V>? _truthSubscription;
-  StreamSubscription<V>? _freshSubscription;
-  StreamController<ResourceAction>? _actionController;
-  final _freshSource = BehaviorSubject<Stream<V>>();
-  bool _isLoadingFresh = false;
-
-  final _valueLock = BehaviorSubject<_Lock<V>>.seeded(_Lock.unlocked());
-
   @protected
   Stream<V> readFreshSource(K key);
 
@@ -60,6 +52,27 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   @protected
   Future<void> writeTruthSource(K key, V value);
+
+  @protected
+  Stream<V> transformActions(
+    Stream<ResourceAction> actions,
+    Stream<V> Function(ResourceAction) mapper,
+  ) {
+    return actions.flatMap(mapper);
+  }
+
+  @protected
+  Stream<V> mapActionToValue(ResourceAction action) async* {
+    // NO OP
+  }
+
+  @protected
+  Stream<V> mappedValue(V Function(V value) mapper) async* {
+    await untilValueUnlocked();
+    if (state.hasValue) {
+      yield mapper(state.requireValue);
+    }
+  }
 
   /// Future that completes when the value is unlocked.
   ///
@@ -88,26 +101,60 @@ abstract class BaseResourceBloc<K extends Object, V>
     }
   }
 
-  @protected
-  Stream<V> mappedValue(V Function(V value) mapper) async* {
-    await untilValueUnlocked();
-    if (state.hasValue) {
-      yield mapper(state.requireValue);
+  ResourceState<K, V> _stateForTruthValue(V value) {
+    assert(key != null);
+    if (_isLoadingFresh) {
+      return state.copyWithValue(
+        value,
+        source: Source.cache,
+      );
+    } else {
+      return ResourceState.withValue(
+        key!,
+        value,
+        isLoading: false,
+        source: Source.fresh,
+      );
     }
   }
 
-  @protected
-  Stream<V> transformActions(
-    Stream<ResourceAction> actions,
-    Stream<V> Function(ResourceAction) mapper,
+  static ResourceState<K, V> _initialStateFor<K extends Object, V>(
+    K? key,
+    InitialValue<K, V>? initialValue,
   ) {
-    return actions.flatMap(mapper);
+    if (key == null) {
+      return ResourceState.initial();
+    } else {
+      final value = () {
+        try {
+          return initialValue?.call(key);
+        } catch (e, s) {
+          assert(() {
+            print('WARN: Initial value callback threw on key \'$key\'. '
+                'Ignoring initial value. Error: $e');
+            print(s);
+            return true;
+          }());
+          return null;
+        }
+      }();
+
+      if (value != null) {
+        return ResourceState.withValue(key, value,
+            isLoading: true, source: Source.fresh);
+      } else {
+        return ResourceState.loading(key);
+      }
+    }
   }
 
-  @protected
-  Stream<V> mapActionToValue(ResourceAction action) async* {
-    // NO OP
-  }
+  StreamSubscription<V>? _truthSubscription;
+  StreamSubscription<V>? _freshSubscription;
+  StreamController<ResourceAction>? _actionController;
+  final _freshSource = BehaviorSubject<Stream<V>>();
+  bool _isLoadingFresh = false;
+
+  final _valueLock = BehaviorSubject<_Lock<V>>.seeded(_Lock.unlocked());
 
   void _setUpTruthSubscription(K newKey) {
     assert(_truthSubscription == null);
@@ -164,54 +211,6 @@ abstract class BaseResourceBloc<K extends Object, V>
       onDone: () => _isLoadingFresh = false,
       cancelOnError: true,
     );
-  }
-
-  Future<void> _closeAllSubscriptions() async {
-    await _closeFreshSubscriptions();
-
-    await _truthSubscription?.cancel();
-    _truthSubscription = null;
-    if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
-  }
-
-  Future<void> _closeFreshSubscriptions() async {
-    await _freshSubscription?.cancel();
-    await _actionController?.close();
-    if (!_freshSource.isClosed) _freshSource.value = Stream.empty();
-
-    _freshSubscription = null;
-    _actionController = null;
-    _isLoadingFresh = false;
-  }
-
-  static ResourceState<K, V> _initialStateFor<K extends Object, V>(
-    K? key,
-    InitialValue<K, V>? initialValue,
-  ) {
-    if (key == null) {
-      return ResourceState.initial();
-    } else {
-      final value = () {
-        try {
-          return initialValue?.call(key);
-        } catch (e, s) {
-          assert(() {
-            print('WARN: Initial value callback threw on key \'$key\'. '
-                'Ignoring initial value. Error: $e');
-            print(s);
-            return true;
-          }());
-          return null;
-        }
-      }();
-
-      if (value != null) {
-        return ResourceState.withValue(key, value,
-            isLoading: true, source: Source.fresh);
-      } else {
-        return ResourceState.loading(key);
-      }
-    }
   }
 
   @override
@@ -349,25 +348,26 @@ abstract class BaseResourceBloc<K extends Object, V>
     _actionController!.sink.add(event);
   }
 
-  ResourceState<K, V> _stateForTruthValue(V value) {
-    assert(key != null);
-    if (_isLoadingFresh) {
-      return state.copyWithValue(
-        value,
-        source: Source.cache,
-      );
-    } else {
-      return ResourceState.withValue(
-        key!,
-        value,
-        isLoading: false,
-        source: Source.fresh,
-      );
-    }
-  }
-
   Stream<ResourceState<K, V>> _mapTruthValueToState(_TruthValue event) async* {
     yield* flushState();
+  }
+
+  Future<void> _closeAllSubscriptions() async {
+    await _closeFreshSubscriptions();
+
+    await _truthSubscription?.cancel();
+    _truthSubscription = null;
+    if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
+  }
+
+  Future<void> _closeFreshSubscriptions() async {
+    await _freshSubscription?.cancel();
+    await _actionController?.close();
+    if (!_freshSource.isClosed) _freshSource.value = Stream.empty();
+
+    _freshSubscription = null;
+    _actionController = null;
+    _isLoadingFresh = false;
   }
 
   @override
