@@ -319,6 +319,16 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
+    if (_isLoadingFresh) {
+      assert(() {
+        print('WARN: Tried to update value while the fresh source is running '
+            'and no fresh value has been emitted yet. Avoid adding '
+            'ValueUpdate() to the bloc directly. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
+
     yield* flushState();
     _valueLock.value = _Lock.locked();
 

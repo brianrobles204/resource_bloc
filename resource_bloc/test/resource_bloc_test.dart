@@ -598,6 +598,119 @@ void main() {
         expect(bloc.state, isValueState);
         bloc.close();
       });
+
+      test('are ignored during initial fresh read only', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            // Try updating during initial fresh read, should do nothing
+            isInitialLoadingState('key'),
+            isStateWith(isLoading: false, content: 'first'),
+            // Try updated during subsequent fresh read, should reflect
+            isStateWith(isLoading: true, content: 'first'),
+            isStateWith(isLoading: false, content: 'second'),
+            isStateWith(isLoading: false, content: 'insert-2'),
+            isStateWith(isLoading: false, content: 'third'),
+            emitsDone,
+          ]),
+        );
+
+        // Load but pause during fresh read
+        currentContent = 'first';
+        freshValueLocked.value = true;
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        // Add value update manually during initial fresh read
+        bloc.add(
+            ValueUpdate('key', createFreshValue('key', content: 'insert-1')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState('key'));
+        freshValueLocked.value = false;
+        await untilDone(bloc);
+
+        // Try updating during subsequent fresh read
+        final freshSink = streamFreshSource();
+        bloc.reload();
+        await pumpEventQueue();
+        freshSink.add((key) => 'second');
+        await pumpEventQueue();
+
+        expect(bloc.state, isStateWith(isLoading: false, content: 'second'));
+
+        // Add value update manually during subsequent fresh read
+        bloc.add(
+            ValueUpdate('key', createFreshValue('key', content: 'insert-2')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isStateWith(isLoading: false, content: 'insert-2'));
+
+        freshSink.add((key) => 'third');
+        await untilDone(bloc);
+
+        bloc.close();
+      });
+
+      test('during truth read waits then updates with newer value', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWith(isLoading: false, content: 'first'),
+            isStateWith(isLoading: false, content: 'second'),
+            emitsDone,
+          ]),
+        );
+
+        // Load but pause during truth read
+        currentContent = 'first';
+        truthReadLocked.value = true;
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        // Add value update manually during truth read
+        bloc.add(
+            ValueUpdate('key', createFreshValue('key', content: 'second')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState('key'));
+        truthReadLocked.value = false;
+        await untilDone(bloc);
+        await untilDone(bloc); // second await for second value
+
+        bloc.close();
+      });
+
+      test('during truth write waits then updates with newer value', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWith(isLoading: false, content: 'first'),
+            isStateWith(isLoading: false, content: 'second'),
+            emitsDone,
+          ]),
+        );
+
+        // Load but pause during truth write
+        currentContent = 'first';
+        truthWriteLocked.value = true;
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        // Add value update manually during truth write
+        bloc.add(
+            ValueUpdate('key', createFreshValue('key', content: 'second')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState('key'));
+        truthWriteLocked.value = false;
+        await untilDone(bloc);
+        await untilDone(bloc); // second await for second value
+
+        bloc.close();
+      });
     });
 
     group('error updates', () {
@@ -783,6 +896,16 @@ void main() {
         await pumpEventQueue();
 
         bloc.close();
+      });
+    });
+
+    group('truth source updates', () {
+      test('can emit before reload is called', () {});
+
+      test('can emit while fresh source is loading, tagged as cache', () {});
+
+      test('during truth source write will emit both values after write', () {
+        //
       });
     });
 
