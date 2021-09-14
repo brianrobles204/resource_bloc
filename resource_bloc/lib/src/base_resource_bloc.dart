@@ -163,7 +163,7 @@ abstract class BaseResourceBloc<K extends Object, V>
         _valueLock.value = _Lock.withValue(value);
         add(_TruthValue(value));
       },
-      onError: (error) => add(ErrorUpdate(error)),
+      onError: (error) => add(ErrorUpdate(error, isValueValid: false)),
       onDone: () => _valueLock.value = _Lock.unlocked(),
       cancelOnError: true,
     );
@@ -207,7 +207,7 @@ abstract class BaseResourceBloc<K extends Object, V>
         hasEmittedValue = true;
         add(ValueUpdate(key, value));
       },
-      onError: (Object error) => add(ErrorUpdate(error)),
+      onError: (Object error) => add(ErrorUpdate(error, isValueValid: true)),
       onDone: () => _isLoadingFresh = false,
       cancelOnError: true,
     );
@@ -326,12 +326,21 @@ abstract class BaseResourceBloc<K extends Object, V>
       _setUpTruthSubscription(event.key);
     }
 
-    await writeTruthSource(event.key, event.value);
+    try {
+      await writeTruthSource(event.key, event.value);
+    } catch (error) {
+      add(ErrorUpdate(error, isValueValid: false));
+    }
   }
 
   Stream<ResourceState<K, V>> _mapErrorUpdateToState(ErrorUpdate event) async* {
     await _closeAllSubscriptions();
-    yield state.copyWithError(event.error, isLoading: false);
+
+    yield state.copyWithError(
+      event.error,
+      isLoading: false,
+      includeValue: event.isValueValid,
+    );
   }
 
   Stream<ResourceState<K, V>> _mapResourceActionToState(

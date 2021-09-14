@@ -499,6 +499,7 @@ void main() {
       test('without key is unsupported & does nothing', () async {
         expectLater(bloc.stream, emitsDone);
 
+        // Add value update manually during initial state, with no key yet
         expect(bloc.state, isInitialState);
         bloc.add(ValueUpdate('key', createFreshValue('key')));
         await pumpEventQueue();
@@ -511,13 +512,14 @@ void main() {
         initialKey = 'key';
         setUpBloc();
 
-        print('after');
+        // Add key error
         bloc.add(KeyError(StateError('test error')));
         await pumpEventQueue();
 
         expectLater(bloc.stream, emitsDone);
-
         expect(bloc.state, isKeyErrorState);
+
+        // Add value update manually, after key error
         bloc.add(ValueUpdate('key', createFreshValue('key')));
         await pumpEventQueue();
 
@@ -526,6 +528,7 @@ void main() {
       });
 
       test('after error is unsupported and does nothing', () async {
+        // Load but will immediately throw on fresh read
         initialKey = 'key';
         freshValueThrowable.value = StateError('test error');
         setUpBloc();
@@ -540,6 +543,7 @@ void main() {
 
         expect(bloc.state, isErrorState);
 
+        // Add value update manually after error
         bloc.add(ValueUpdate('key', createFreshValue('key')));
         await pumpEventQueue();
 
@@ -561,6 +565,7 @@ void main() {
 
         expect(bloc.state, isValueState);
 
+        // Add value update manually, but with wrong key
         bloc.add(ValueUpdate('second', createFreshValue('second')));
         await pumpEventQueue();
 
@@ -576,13 +581,13 @@ void main() {
           emitsInOrder(<dynamic>[
             isInitialLoadingState('key'),
             isStateWith(isLoading: false, content: 'key-a', count: 1),
-            // reload but throws on read
+            // reload but throw on read
             isStateWith(isLoading: true, content: 'key-a', count: 1),
             isStateWhere(
                 isLoading: false,
                 value: isValueWith(content: 'key-a', count: 1),
                 error: isStateError),
-            // reload, returns successfully but then emits error
+            // reload, return successfully but then emit an error
             isStateWhere(
                 isLoading: true,
                 value: isValueWith(content: 'key-a', count: 1),
@@ -603,13 +608,13 @@ void main() {
         freshSink.add((key) => '$key-a');
         await pumpEventQueue();
 
-        // reload, but throws on read
+        // reload, but throw on read
         bloc.reload();
         await pumpEventQueue();
         freshSink.add((key) => throw StateError('error'));
         await pumpEventQueue();
 
-        // reload, returns successfully, but then emits an error
+        // reload, return successfully, but then emit an error
         bloc.reload();
         await pumpEventQueue();
         freshSink.add((key) => '$key-b');
@@ -619,11 +624,100 @@ void main() {
         freshSink.add((key) => throw StateError('error 2'));
       });
 
-      test('pass early truth reading errors to the state', () {});
+      test('pass early truth reading errors to the state', () async {
+        freshValueLocked.value = true;
 
-      test('pass subsequent truth reading errors to the state', () {});
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+            emitsDone,
+          ]),
+        );
 
-      test('pass truth writing errors to the state', () {});
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState('key'));
+
+        // Emit error from truth source before fresh source has finished
+        truthDB['key']!.addError(StateError('error'));
+        await untilDone(bloc);
+
+        freshValueLocked.value = false;
+        await pumpEventQueue();
+
+        bloc.close();
+      });
+
+      test('pass later truth read errors to state, erasing values', () async {
+        currentContent = 'first';
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'key', content: 'first', count: 1),
+                error: isNull),
+            // Emit value from truth source after fresh read has finished
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'key', content: 'second', count: 1),
+                error: isNull),
+            // Emit error from truth source
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+          ]),
+        );
+
+        bloc.key = 'key';
+        await untilDone(bloc);
+
+        truthDB['key']!.add(createFreshValue('key', content: 'second'));
+        await untilDone(bloc);
+
+        truthDB['key']!.addError(StateError('error'));
+      });
+
+      test('pass truth writing errors to state, erasing values', () async {
+        currentContent = 'first';
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            // Initial error on first write
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+            // Reload, complete successfully, then error on next reload / write
+            isStateWhere(isLoading: true, error: isStateError, value: isNull),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'key', content: 'first', count: 2),
+                error: isNull),
+            isStateWhere(
+                isLoading: true,
+                value: isValueWith(name: 'key', content: 'first', count: 2),
+                error: isNull),
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+          ]),
+        );
+
+        // Initial error on first write
+        truthWriteThrowable.value = StateError('error');
+        bloc.key = 'key';
+        await untilDone(bloc);
+
+        // Reload, complete successfully, then error on next reload / write
+        truthWriteThrowable.value = null;
+        bloc.reload();
+        await untilDone(bloc);
+
+        currentContent = 'second';
+        truthWriteThrowable.value = StateError('error');
+        bloc.reload();
+      });
 
       test('cancel further fresh or truth updates', () {});
     });

@@ -49,10 +49,11 @@ class ValueUpdate<K extends Object, V> extends ResourceEvent {
 
 @sealed
 class ErrorUpdate extends ResourceEvent {
-  ErrorUpdate(this.error);
+  ErrorUpdate(this.error, {required this.isValueValid});
 
   final Object error;
+  final bool isValueValid;
 
   @override
-  List<Object?> get props => [error];
+  List<Object?> get props => [error, isValueValid];
 }
