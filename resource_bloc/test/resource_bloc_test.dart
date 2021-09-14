@@ -900,7 +900,34 @@ void main() {
     });
 
     group('truth source updates', () {
-      test('can emit before reload is called', () {});
+      test('can emit before reload is called', () async {
+        initialKey = 'key';
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isStateWith(
+                isLoading: false, content: 'first', source: Source.fresh),
+            isStateWith(
+                isLoading: true, content: 'first', source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'second', source: Source.fresh),
+          ]),
+        );
+
+        await pumpEventQueue();
+        expect(truthDB['key'], isNotNull,
+            reason: 'Bloc should be listening to truth source on init, '
+                'if initial key is given');
+
+        // Emit value from truth source before reload or key update
+        truthDB['key']!.value = createFreshValue('key', content: 'first');
+        await untilDone(bloc);
+
+        currentContent = 'second';
+        bloc.reload();
+      });
 
       test('can emit while fresh source is loading, tagged as cache', () {});
 
