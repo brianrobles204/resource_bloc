@@ -746,7 +746,44 @@ void main() {
         bloc.reload();
       });
 
-      test('cancel further fresh or truth updates', () {});
+      test('cancel further fresh or truth updates', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'key', content: 'key-a', count: 1),
+                error: isNull),
+            // Add error manually
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'key', content: 'key-a', count: 1),
+                error: isStateError),
+            emitsDone,
+          ]),
+        );
+
+        final freshSink = streamFreshSource();
+
+        bloc.key = 'key';
+        await pumpEventQueue();
+        freshSink.add((key) => '$key-a');
+        await untilDone(bloc);
+
+        // Add error manually
+        bloc.add(ErrorUpdate(StateError('error'), isValueValid: true));
+        await pumpEventQueue();
+
+        // Emit from fresh and truth sources. Should have no effect on bloc
+        freshSink.add((key) => '$key-b');
+        await pumpEventQueue();
+
+        truthDB['key']!.value = createFreshValue('key', content: 'other');
+        await pumpEventQueue();
+
+        bloc.close();
+      });
     });
 
     test('handles changes in keys', () {});
