@@ -189,7 +189,7 @@ void main() {
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(key: 'first', isLoading: true, value: isNull),
+            isInitialLoadingState('first'),
             isStateWith(isLoading: false, name: 'first', count: 1),
           ]),
         );
@@ -200,7 +200,6 @@ void main() {
       test('returning non-null value should reflect in state', () async {
         initialValue = (key) => createFreshValue(key, content: '$key-loading');
         initialKey = 'first';
-        currentContent = 'first-ready';
         setUpBloc();
 
         expectLater(
@@ -217,6 +216,7 @@ void main() {
           ]),
         );
 
+        currentContent = 'first-ready';
         bloc.reload();
         await untilDone(bloc);
 
@@ -224,7 +224,7 @@ void main() {
         bloc.key = 'second';
       });
 
-      test('errors should be ignored', () async {
+      test('errors should be treated as if there\'s no value', () async {
         var shouldThrow = true;
         initialValue = (key) {
           if (shouldThrow) {
@@ -233,17 +233,16 @@ void main() {
             return createFreshValue(key, content: '$key-loading');
           }
         };
-        currentContent = 'first-ready';
         initialKey = 'first';
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(isLoading: true, key: 'first', value: isNull),
+            isInitialLoadingState('first'),
             isStateWith(
                 isLoading: false, name: 'first', content: 'first-ready'),
-            isStateWhere(isLoading: true, key: 'second', value: isNull),
+            isInitialLoadingState('second'),
             isStateWith(
                 isLoading: false, name: 'second', content: 'second-ready'),
             isStateWith(
@@ -253,6 +252,7 @@ void main() {
           ]),
         );
 
+        currentContent = 'first-ready';
         bloc.reload();
         await untilDone(bloc);
 
@@ -269,54 +269,62 @@ void main() {
     group('.reload()', () {
       test('reloads the bloc', () async {
         initialKey = 'key';
-        currentContent = 'first';
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            // Reload the first time
+            isInitialLoadingState('key'),
             isStateWith(isLoading: false, content: 'first'),
+            // Reload the second time
             isStateWith(isLoading: true, content: 'first'),
             isStateWith(isLoading: false, content: 'second'),
+            // Reload the third time
             isStateWith(isLoading: true, content: 'second'),
             isStateWith(isLoading: false, content: 'third'),
           ]),
         );
 
+        // Reload the first time
+        currentContent = 'first';
         bloc.reload();
         await untilDone(bloc);
 
+        // Reload the second time
         currentContent = 'second';
         bloc.reload();
-
         await untilDone(bloc);
 
+        // Reload the third time
         currentContent = 'third';
         bloc.reload();
       });
 
       test('after key error does nothing', () async {
         initialKey = 'key';
-        currentContent = 'first';
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            isInitialLoadingState('key'),
             isStateWith(isLoading: false, content: 'first'),
             isKeyErrorState,
             emitsDone,
           ]),
         );
 
+        // Reload normally
+        currentContent = 'first';
         bloc.reload();
         await untilDone(bloc);
 
+        // Add key error
         bloc.add(KeyError(StateError('test key error')));
         await pumpEventQueue();
 
+        // Try reloading again
         bloc.reload();
         await pumpEventQueue();
 
@@ -325,22 +333,24 @@ void main() {
 
       test('while already reloading does nothing', () async {
         initialKey = 'key';
-        currentContent = 'first';
-        freshValueLocked.value = true;
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(isLoading: true, key: 'key', value: isNull),
+            isInitialLoadingState('key'),
             isStateWith(isLoading: false, content: 'first', count: 1),
             emitsDone,
           ]),
         );
 
+        // Reload but pause during fresh read
+        currentContent = 'first';
+        freshValueLocked.value = true;
         bloc.reload();
         await pumpEventQueue();
 
+        // Reload while fresh read is ongoing
         bloc.reload();
         await pumpEventQueue();
         freshValueLocked.value = false;
@@ -351,17 +361,18 @@ void main() {
 
       test('after first value in fresh stream starts a new load', () async {
         initialKey = 'first';
-        final firstSink = streamFreshSource();
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(isLoading: true, key: 'first', value: isNull),
+            // Load from fresh source and emit two values
+            isInitialLoadingState('first'),
             isStateWith(
                 isLoading: false, content: 'first-a', source: Source.fresh),
             isStateWith(
                 isLoading: false, content: 'first-b', source: Source.fresh),
+            // Reload with different fresh source
             isStateWith(
                 isLoading: true, content: 'first-b', source: Source.fresh),
             isStateWith(
@@ -369,6 +380,8 @@ void main() {
           ]),
         );
 
+        // Load from fresh source and emit two values
+        final firstSink = streamFreshSource();
         bloc.reload();
         await pumpEventQueue();
 
@@ -378,8 +391,9 @@ void main() {
         firstSink.add((key) => '$key-b');
         await untilDone(bloc);
 
+        // Reload with different fresh source, and have old & new fresh source
+        // emit different values. Only values from newer one should reflect.
         final secondSink = streamFreshSource();
-
         bloc.reload(); // Listening for second sink now
         await pumpEventQueue();
 
@@ -392,20 +406,19 @@ void main() {
 
       test('after error starts a new load', () async {
         initialKey = 'first';
-        currentContent = 'success';
-        freshValueThrowable.value = StateError('test error');
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isStateWhere(
-                isLoading: true, key: 'first', error: isNull, value: isNull),
+            // Load but immediately throw error
+            isInitialLoadingState('first'),
             isStateWhere(
                 isLoading: false,
                 key: 'first',
                 error: isStateError,
                 value: isNull),
+            // Reload and complete successfully
             isStateWhere(
                 isLoading: true,
                 key: 'first',
@@ -419,23 +432,26 @@ void main() {
           ]),
         );
 
+        // Load but immediately throw error
+        currentContent = 'success';
+        freshValueThrowable.value = StateError('test error');
         bloc.reload();
         await untilDone(bloc);
 
+        // Reload and complete successfully
         freshValueThrowable.value = null;
         bloc.reload();
       });
 
       test('during truth source read waits then starts a new load', () async {
         initialKey = 'first';
-        currentContent = 'x';
-        truthReadLocked.value = true;
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
             isInitialLoadingState('first'),
+            // Should emit first value then immediately reload
             isStateWith(
                 isLoading: false, content: 'x', count: 1, source: Source.fresh),
             isStateWith(
@@ -445,31 +461,35 @@ void main() {
           ]),
         );
 
+        // Load but pause once truth source read is reached
+        currentContent = 'x';
+        truthReadLocked.value = true;
         bloc.reload();
         await pumpEventQueue();
 
         expect(bloc.state, isInitialLoadingState('first'));
 
+        // Reload while truth source read is ongoing
         currentContent = 'y';
         bloc.reload();
         await pumpEventQueue();
 
         expect(bloc.state, isInitialLoadingState('first'));
 
+        // Allow truth source read to finish
         truthReadLocked.value = false;
         await pumpEventQueue();
       });
 
       test('during truth source write waits then starts a new load', () async {
         initialKey = 'first';
-        currentContent = 'x';
-        truthWriteLocked.value = true;
         setUpBloc();
 
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
             isInitialLoadingState('first'),
+            // Should emit first value then immediately reload
             isStateWith(
                 isLoading: false, content: 'x', count: 1, source: Source.fresh),
             isStateWith(
@@ -479,17 +499,22 @@ void main() {
           ]),
         );
 
+        // Load but pause once truth source write is reached
+        currentContent = 'x';
+        truthWriteLocked.value = true;
         bloc.reload();
         await pumpEventQueue();
 
         expect(bloc.state, isInitialLoadingState('first'));
 
+        // Reload while truth source write is ongoing
         currentContent = 'y';
         bloc.reload();
         await pumpEventQueue();
 
         expect(bloc.state, isInitialLoadingState('first'));
 
+        // Allow truth source write to finish
         truthWriteLocked.value = false;
         await pumpEventQueue();
       });
@@ -528,11 +553,11 @@ void main() {
       });
 
       test('after error is unsupported and does nothing', () async {
-        // Load but will immediately throw on fresh read
         initialKey = 'key';
-        freshValueThrowable.value = StateError('test error');
         setUpBloc();
 
+        // Load but immediately throw on fresh read
+        freshValueThrowable.value = StateError('test error');
         bloc.reload();
         await pumpEventQueue();
 
@@ -555,6 +580,7 @@ void main() {
         initialKey = 'first';
         setUpBloc();
 
+        // Reload normally first
         bloc.reload();
         await untilDone(bloc);
 
@@ -625,8 +651,6 @@ void main() {
       });
 
       test('pass early truth reading errors to the state', () async {
-        freshValueLocked.value = true;
-
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -636,6 +660,8 @@ void main() {
           ]),
         );
 
+        // Load, but pause on fresh read
+        freshValueLocked.value = true;
         bloc.key = 'key';
         await pumpEventQueue();
 
@@ -652,8 +678,6 @@ void main() {
       });
 
       test('pass later truth read errors to state, erasing values', () async {
-        currentContent = 'first';
-
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -672,12 +696,15 @@ void main() {
           ]),
         );
 
+        currentContent = 'first';
         bloc.key = 'key';
         await untilDone(bloc);
 
+        // Emit value from truth source after fresh read has finished
         truthDB['key']!.add(createFreshValue('key', content: 'second'));
         await untilDone(bloc);
 
+        // Emit error from truth source
         truthDB['key']!.addError(StateError('error'));
       });
 
