@@ -163,10 +163,7 @@ void main() {
         initialKey = 'first';
         setUpBloc();
 
-        final isInitialLoadingState =
-            isStateWhere(key: 'first', isLoading: true, value: isNull);
-
-        expect(bloc.state, isInitialLoadingState);
+        expect(bloc.state, isInitialLoadingState('first'));
         expect(freshReadCount, equals(0));
         expect(truthReadCount, equals(0));
         expect(truthWriteCount, equals(0));
@@ -176,7 +173,7 @@ void main() {
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isInitialLoadingState,
+            isInitialLoadingState('first'),
             isStateWith(isLoading: false, name: 'first', count: 1),
           ]),
         );
@@ -435,13 +432,10 @@ void main() {
         truthReadLocked.value = true;
         setUpBloc();
 
-        final isInitialLoadingState =
-            isStateWhere(isLoading: true, key: 'first', value: isNull);
-
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isInitialLoadingState,
+            isInitialLoadingState('first'),
             isStateWith(
                 isLoading: false, content: 'x', count: 1, source: Source.fresh),
             isStateWith(
@@ -454,13 +448,13 @@ void main() {
         bloc.reload();
         await pumpEventQueue();
 
-        expect(bloc.state, isInitialLoadingState);
+        expect(bloc.state, isInitialLoadingState('first'));
 
         currentContent = 'y';
         bloc.reload();
         await pumpEventQueue();
 
-        expect(bloc.state, isInitialLoadingState);
+        expect(bloc.state, isInitialLoadingState('first'));
 
         truthReadLocked.value = false;
         await pumpEventQueue();
@@ -472,13 +466,10 @@ void main() {
         truthWriteLocked.value = true;
         setUpBloc();
 
-        final isInitialLoadingState =
-            isStateWhere(isLoading: true, key: 'first', value: isNull);
-
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
-            isInitialLoadingState,
+            isInitialLoadingState('first'),
             isStateWith(
                 isLoading: false, content: 'x', count: 1, source: Source.fresh),
             isStateWith(
@@ -491,13 +482,13 @@ void main() {
         bloc.reload();
         await pumpEventQueue();
 
-        expect(bloc.state, isInitialLoadingState);
+        expect(bloc.state, isInitialLoadingState('first'));
 
         currentContent = 'y';
         bloc.reload();
         await pumpEventQueue();
 
-        expect(bloc.state, isInitialLoadingState);
+        expect(bloc.state, isInitialLoadingState('first'));
 
         truthWriteLocked.value = false;
         await pumpEventQueue();
@@ -505,7 +496,77 @@ void main() {
     });
 
     group('value updates', () {
-      //
+      test('without key is unsupported & does nothing', () async {
+        expectLater(bloc.stream, emitsDone);
+
+        expect(bloc.state, isInitialState);
+        bloc.add(ValueUpdate('key', createFreshValue('key')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialState);
+        await bloc.close();
+      });
+
+      test('with key error is unsupported and does nothing', () async {
+        initialKey = 'key';
+        setUpBloc();
+
+        print('after');
+        bloc.add(KeyError(StateError('test error')));
+        await pumpEventQueue();
+
+        expectLater(bloc.stream, emitsDone);
+
+        expect(bloc.state, isKeyErrorState);
+        bloc.add(ValueUpdate('key', createFreshValue('key')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isKeyErrorState);
+        await bloc.close();
+      });
+
+      test('after error is unsupported and does nothing', () async {
+        initialKey = 'key';
+        freshValueThrowable.value = StateError('test error');
+        setUpBloc();
+
+        bloc.reload();
+        await pumpEventQueue();
+
+        expectLater(bloc.stream, emitsDone);
+
+        final isErrorState = isStateWhere(
+            isLoading: false, key: 'key', error: isStateError, value: isNull);
+
+        expect(bloc.state, isErrorState);
+
+        bloc.add(ValueUpdate('key', createFreshValue('key')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isErrorState);
+        bloc.close();
+      });
+
+      test('with non-matching key does nothing', () async {
+        initialKey = 'first';
+        setUpBloc();
+
+        bloc.reload();
+        await untilDone(bloc);
+
+        expectLater(bloc.stream, emitsDone);
+
+        final isValueState = isStateWith(
+            key: 'first', isLoading: false, name: 'first', count: 1);
+
+        expect(bloc.state, isValueState);
+
+        bloc.add(ValueUpdate('second', createFreshValue('second')));
+        await pumpEventQueue();
+
+        expect(bloc.state, isValueState);
+        bloc.close();
+      });
     });
 
     group('error updates', () {
@@ -606,6 +667,9 @@ Future<void> untilDone(ResourceBloc bloc) =>
     bloc.stream.firstWhere((state) => !state.isLoading);
 
 final Matcher isInitialState = equals(ResourceState<String, _Value>.initial());
+
+Matcher isInitialLoadingState(String key) =>
+    equals(ResourceState<String, _Value>.loading(key));
 
 final Matcher isKeyErrorState = isStateWhere(
     isLoading: false, key: isNull, value: isNull, error: isStateError);

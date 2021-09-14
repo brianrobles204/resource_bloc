@@ -310,6 +310,15 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
+    if (_freshSubscription == null) {
+      assert(() {
+        print('WARN: Tried to update value with event \'$event\', but no fresh '
+            'subscription is currently running. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
+
     yield* flushState();
     _valueLock.value = _Lock.locked();
 
