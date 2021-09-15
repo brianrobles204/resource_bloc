@@ -121,16 +121,140 @@ void main() {
       bloc.close();
     });
 
-    test('can load from truth source cache', () {});
+    test('can load from truth source cache', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialLoadingState('first'),
+          isStateWith(isLoading: true, content: 'c-1', source: Source.cache),
+          isStateWith(isLoading: false, content: 'f-1', source: Source.fresh),
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: true, content: 'c-2', source: Source.cache),
+          isStateWith(isLoading: false, content: 'f-2', source: Source.fresh),
+        ]),
+      );
 
-    test('restarts any in-progress loading', () {});
+      bloc.freshContent = 'f-1';
+      bloc.getTruthSource('first').value =
+          bloc.createFreshValue('first', content: 'c-1');
+      bloc.key = 'first';
+      await untilDone(bloc);
 
-    test('triggers a fresh reload after error, if key is different', () {});
-
-    test('during truth source read cancels truth source, reloads', () {
-      //
+      bloc.freshContent = 'f-2';
+      bloc.getTruthSource('second').value =
+          bloc.createFreshValue('second', content: 'c-2');
+      bloc.key = 'second';
     });
 
-    test('during truth source write cancels truth source, reloads', () {});
+    test('restarts any in-progress loading', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Change key in the middle of fresh content read
+          isInitialLoadingState('first'),
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, name: 'second', content: 'second-x'),
+        ]),
+      );
+
+      final firstSink = bloc.applyStreamFreshSource();
+      bloc.key = 'first';
+      await pumpEventQueue();
+
+      final secondSink = bloc.applyStreamFreshSource();
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      firstSink.add((key) => '$key-a');
+      await pumpEventQueue();
+
+      secondSink.add((key) => '$key-x');
+      await pumpEventQueue();
+    });
+
+    test('triggers a fresh reload after error, if key is different', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load with error
+          isInitialLoadingState('first'),
+          isStateWhere(isLoading: false, error: isStateError, value: isNull),
+          // Reload when key changes
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, error: isNull, count: 2),
+        ]),
+      );
+
+      bloc.freshValueThrowable = StateError('error');
+      bloc.key = 'first';
+      await untilDone(bloc);
+
+      bloc.freshValueThrowable = null;
+      bloc.key = 'second';
+    });
+
+    test('during truth source read cancels truth source, reloads', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load but pause during truth source read
+          isInitialLoadingState('first'),
+          // Reload due to key change, first value not emitted
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'new', count: 2),
+          emitsDone,
+        ]),
+      );
+
+      // Load but pause during truth source read
+      bloc.truthReadLocked.value = true;
+      bloc.freshContent = 'old';
+      bloc.key = 'first';
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('first'));
+
+      // Reload due to key change, first value not emitted
+      bloc.freshContent = 'new';
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      bloc.truthReadLocked.value = false;
+      await pumpEventQueue();
+
+      bloc.close();
+    });
+
+    test('during truth source write cancels truth source, reloads', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load but pause during truth source write
+          isInitialLoadingState('first'),
+          // Reload due to key change, first value not emitted
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'new', count: 2),
+          emitsDone,
+        ]),
+      );
+
+      // Load but pause during truth source write
+      bloc.truthWriteLocked.value = true;
+      bloc.freshContent = 'old';
+      bloc.key = 'first';
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('first'));
+
+      // Reload due to key change, first value not emitted
+      bloc.freshContent = 'new';
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      bloc.truthWriteLocked.value = false;
+      await pumpEventQueue();
+
+      bloc.close();
+    });
   });
 }

@@ -105,8 +105,7 @@ class ResourceState<K extends Object, V> extends Equatable {
       );
 
   @override
-  List<Object?> get props =>
-      [isLoading, hasValue, value, source, hasError, error];
+  List<Object?> get props => [isLoading, key, value, source, error];
 
   @override
   String toString() => '$runtimeType('

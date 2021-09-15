@@ -187,7 +187,7 @@ void main() {
     });
 
     test('during truth source read waits then starts a new load', () async {
-      bloc = TestResourceBloc(initialKey: 'key');
+      bloc = TestResourceBloc(initialKey: 'first');
 
       expectLater(
         bloc.stream,
@@ -224,7 +224,7 @@ void main() {
     });
 
     test('during truth source write waits then starts a new load', () async {
-      bloc = TestResourceBloc(initialKey: 'key');
+      bloc = TestResourceBloc(initialKey: 'first');
 
       expectLater(
         bloc.stream,
