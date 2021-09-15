@@ -714,7 +714,7 @@ void main() {
     });
 
     group('error updates', () {
-      test('do not erase existing data', () async {
+      test('during reload do not erase existing data', () async {
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -771,7 +771,25 @@ void main() {
         freshSink.add((key) => throw StateError('error 2'));
       });
 
-      test('pass early truth reading errors to the state', () async {
+      test('during set-up of truth source reflect in the state', () async {
+        initialKey = 'key';
+        truthDB['key'] = BehaviorSubject()..addError(StateError('error'));
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            // No initial loading state, starts with error due to truth source
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+            emitsDone,
+          ]),
+        );
+
+        await pumpEventQueue();
+        bloc.close();
+      });
+
+      test('from truth source while loading fresh reflect in state', () async {
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -798,7 +816,7 @@ void main() {
         bloc.close();
       });
 
-      test('pass later truth read errors to state, erasing values', () async {
+      test('during later truth read reflect in state, erase values', () async {
         expectLater(
           bloc.stream,
           emitsInOrder(<dynamic>[
@@ -829,7 +847,7 @@ void main() {
         truthDB['key']!.addError(StateError('error'));
       });
 
-      test('pass truth writing errors to state, erasing values', () async {
+      test('during truth write reflect in state, erasing values', () async {
         currentContent = 'first';
 
         expectLater(
