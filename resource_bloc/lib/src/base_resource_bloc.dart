@@ -9,19 +9,22 @@ import 'resource_state.dart';
 
 typedef InitialValue<K extends Object, V> = V? Function(K key);
 
-class _Lock<V> {
-  const _Lock.withValue(this.value)
+class _Lock<K extends Object, V> {
+  const _Lock.withValue(this.key, this.value)
       : hasValue = true,
         isLocked = true;
   const _Lock.locked()
-      : value = null,
+      : key = null,
+        value = null,
         hasValue = false,
         isLocked = true;
   const _Lock.unlocked()
-      : value = null,
+      : key = null,
+        value = null,
         hasValue = false,
         isLocked = false;
 
+  final K? key;
   final V? value;
   final bool hasValue;
   final bool isLocked;
@@ -96,7 +99,9 @@ abstract class BaseResourceBloc<K extends Object, V>
   Stream<ResourceState<K, V>> flushState() async* {
     if (_valueLock.value.isLocked) {
       await _valueLock.firstWhere((lock) => lock.hasValue);
-      yield _stateForTruthValue(_valueLock.value.value!);
+      if (key == _valueLock.value.key) {
+        yield _stateForTruthValue(_valueLock.value.value!);
+      }
       _valueLock.value = _Lock.unlocked();
     }
   }
@@ -154,13 +159,13 @@ abstract class BaseResourceBloc<K extends Object, V>
   final _freshSource = BehaviorSubject<Stream<V>>();
   bool _isLoadingFresh = false;
 
-  final _valueLock = BehaviorSubject<_Lock<V>>.seeded(_Lock.unlocked());
+  final _valueLock = BehaviorSubject<_Lock<K, V>>.seeded(_Lock.unlocked());
 
   void _setUpTruthSubscription(K newKey) {
     assert(_truthSubscription == null);
     _truthSubscription = readTruthSource(newKey).listen(
       (value) {
-        _valueLock.value = _Lock.withValue(value);
+        _valueLock.value = _Lock.withValue(newKey, value);
         add(_TruthValue(value));
       },
       onError: (error) => add(ErrorUpdate(error, isValueValid: false)),
@@ -238,16 +243,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     if (key != event.key) {
       await _closeAllSubscriptions();
 
-      if (key != null || !state.hasError) {
-        yield _initialStateFor(event.key, initialValue);
-      } else {
-        // Previously with key error. Emit the prior error but with the new key.
-        yield ResourceState.withError(
-          state.requireError,
-          key: event.key,
-          isLoading: true,
-        );
-      }
+      yield _initialStateFor(event.key, initialValue);
 
       _isLoadingFresh = true;
       _setUpTruthSubscription(event.key);

@@ -1107,15 +1107,145 @@ void main() {
       });
     });
 
-    test('handles changes in keys', () {});
+    group('key updates', () {
+      test('do nothing if key is the same', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWith(isLoading: false, name: 'key', count: 1),
+            emitsDone,
+          ]),
+        );
 
-    test('passes key errors to the state', () {});
+        bloc.key = 'key';
+        await pumpEventQueue();
 
-    test('key errors overwrite existing data with an error', () {});
+        bloc.key = 'key';
+        await pumpEventQueue();
 
-    test('key errors can recover to the same prior key', () {});
+        bloc.close();
+      });
 
-    test('key errors stop loading', () {});
+      test('trigger a fresh reload if key is different', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('first'),
+            isStateWith(
+                isLoading: false, name: 'first', content: 'a', count: 1),
+            isInitialLoadingState('second'),
+            isStateWith(
+                isLoading: false, name: 'second', content: 'b', count: 2),
+            emitsDone,
+          ]),
+        );
+
+        currentContent = 'a';
+        bloc.key = 'first';
+        await untilDone(bloc);
+
+        currentContent = 'b';
+        bloc.key = 'second';
+        await untilDone(bloc);
+
+        bloc.close();
+      });
+
+      test('can recover from key errors to different key', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('first'),
+            isStateWith(
+                isLoading: false, name: 'first', content: 'a', count: 1),
+            isKeyErrorState,
+            isInitialLoadingState('second'),
+            isStateWith(
+                isLoading: false, name: 'second', content: 'b', count: 2),
+            emitsDone,
+          ]),
+        );
+
+        currentContent = 'a';
+        bloc.key = 'first';
+        await untilDone(bloc);
+
+        bloc.add(KeyError(StateError('error')));
+        await pumpEventQueue();
+
+        currentContent = 'b';
+        bloc.key = 'second';
+        await untilDone(bloc);
+
+        bloc.close();
+      });
+
+      test('can recover from key errors to same prior key', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('first'),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'first', content: 'a', count: 1),
+                source: Source.fresh),
+            isKeyErrorState,
+            isInitialLoadingState('first'),
+            isStateWhere(
+                isLoading: true,
+                value: isValueWith(name: 'first', content: 'a', count: 1),
+                source: Source.cache),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(name: 'first', content: 'b', count: 2),
+                source: Source.fresh),
+            emitsDone,
+          ]),
+        );
+
+        currentContent = 'a';
+        bloc.key = 'first';
+        await untilDone(bloc);
+
+        bloc.add(KeyError(StateError('error')));
+        await pumpEventQueue();
+
+        currentContent = 'b';
+        bloc.key = 'first';
+        await untilDone(bloc);
+
+        bloc.close();
+      });
+
+      test('can load from truth source cache', () {});
+
+      test('restarts any in-progress loading', () {});
+
+      test('triggers a fresh reload after error, if key is different', () {});
+
+      test('during truth source read cancels truth source, reloads', () {
+        //
+      });
+
+      test('during truth source write cancels truth source, reloads', () {});
+    });
+
+    group('key errors', () {
+      test('pass errors to the state', () {});
+
+      test('overwrite existing data with an error', () {});
+
+      test('after errors are still reflected', () {});
+
+      test('stop all loading including further fresh / truth updates', () {});
+
+      test('stop all loading even during reload', () {});
+
+      test('stop all loading even during truth read', () {});
+
+      test('stop all loading even during truth write', () {});
+    });
   });
 }
 
