@@ -57,3 +57,15 @@ class ErrorUpdate extends ResourceEvent {
   @override
   List<Object?> get props => [error, isValueValid];
 }
+
+/// Signal that the truth source has updated with a new value.
+///
+/// When this event is added to the bloc, it will flush any pending truth source
+/// updates so that the latest values are reflected in the bloc's current state.
+@sealed
+class TruthSourceUpdate extends ResourceEvent {
+  const TruthSourceUpdate();
+
+  @override
+  List<Object?> get props => [];
+}

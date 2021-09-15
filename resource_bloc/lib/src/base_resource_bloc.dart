@@ -166,7 +166,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     _truthSubscription = readTruthSource(newKey).listen(
       (value) {
         _valueLock.value = _Lock.withValue(newKey, value);
-        add(_TruthValue(value));
+        add(const TruthSourceUpdate());
       },
       onError: (error) => add(ErrorUpdate(error, isValueValid: false)),
       onDone: () => _valueLock.value = _Lock.unlocked(),
@@ -234,8 +234,8 @@ abstract class BaseResourceBloc<K extends Object, V>
       yield* _mapErrorUpdateToState(event);
     } else if (event is ResourceAction) {
       yield* _mapResourceActionToState(event);
-    } else if (event is _TruthValue<V>) {
-      yield* _mapTruthValueToState(event);
+    } else if (event is TruthSourceUpdate) {
+      yield* _mapTruthSourceUpdateToState();
     }
   }
 
@@ -381,7 +381,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     _actionController!.sink.add(event);
   }
 
-  Stream<ResourceState<K, V>> _mapTruthValueToState(_TruthValue event) async* {
+  Stream<ResourceState<K, V>> _mapTruthSourceUpdateToState() async* {
     yield* flushState();
   }
 
@@ -410,17 +410,4 @@ abstract class BaseResourceBloc<K extends Object, V>
     await _valueLock.close();
     return super.close();
   }
-}
-
-/// Event added when the truth source emits a new value.
-///
-/// Private to avoid spoofing of truth value. Only the truth source can
-/// emit this event.
-class _TruthValue<V> extends ResourceEvent {
-  _TruthValue(this.value);
-
-  final V value;
-
-  @override
-  List<Object?> get props => [value];
 }

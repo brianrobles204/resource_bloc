@@ -18,7 +18,7 @@ abstract class ResourceBloc<K extends Object, V> extends BaseResourceBloc<K, V>
 }
 
 mixin ReloadResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
-  void reload() => add(Reload());
+  void reload() => add(const Reload());
 }
 
 mixin KeySetterResourceBlocMixin<K extends Object, V>
