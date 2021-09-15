@@ -183,8 +183,9 @@ abstract class BaseResourceBloc<K extends Object, V>
       );
     }();
 
-    void tryUnlockAction() {
+    void tryUnlockAction() async {
       if (!actionLock.isCompleted) {
+        await untilValueUnlocked();
         _isLoadingFresh = false;
         actionLock.complete();
       }
@@ -248,8 +249,8 @@ abstract class BaseResourceBloc<K extends Object, V>
         );
       }
 
+      _isLoadingFresh = true;
       _setUpTruthSubscription(event.key);
-
       add(Reload());
     } else {
       assert(() {
@@ -295,6 +296,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     _isLoadingFresh = true;
     _setUpFreshSubscription(key);
 
+    if (_truthSubscription == null) {
+      _setUpTruthSubscription(key);
+    }
+
     _freshSource.value = readFreshSource(key);
   }
 
@@ -319,6 +324,15 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
+    if (_truthSubscription == null) {
+      assert(() {
+        print('WARN: Tried to update value with event \'$event\', but no truth '
+            'subscription is currently running. Doing nothing.');
+        return true;
+      }());
+      return;
+    }
+
     if (_isLoadingFresh) {
       assert(() {
         print('WARN: Tried to update value while the fresh source is running '
@@ -332,15 +346,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     yield* flushState();
     _valueLock.value = _Lock.locked();
 
-    if (_truthSubscription == null) {
-      _setUpTruthSubscription(event.key);
-    }
-
-    try {
-      await writeTruthSource(event.key, event.value);
-    } catch (error) {
-      add(ErrorUpdate(error, isValueValid: false));
-    }
+    // Write to truth source, but don't await the write
+    // This allows other events to be processed
+    writeTruthSource(event.key, event.value)
+        .catchError((error) => add(ErrorUpdate(error, isValueValid: false)));
   }
 
   Stream<ResourceState<K, V>> _mapErrorUpdateToState(ErrorUpdate event) async* {

@@ -730,9 +730,17 @@ void main() {
             isStateWhere(
                 isLoading: true,
                 value: isValueWith(content: 'key-a', count: 1),
+                source: Source.fresh,
                 error: isStateError),
-            isStateWith(isLoading: false, content: 'key-b', count: 3),
-            isStateWith(isLoading: false, content: 'key-c', count: 3),
+            isStateWhere(
+                isLoading: true,
+                value: isValueWith(content: 'key-a', count: 1),
+                source: Source.cache,
+                error: isStateError),
+            isStateWith(
+                isLoading: false, content: 'key-b', count: 3, error: isNull),
+            isStateWith(
+                isLoading: false, content: 'key-c', count: 3, error: isNull),
             isStateWhere(
                 isLoading: false,
                 value: isValueWith(content: 'key-c', count: 3),
@@ -929,10 +937,155 @@ void main() {
         bloc.reload();
       });
 
-      test('can emit while fresh source is loading, tagged as cache', () {});
+      test('from seeded truth source can be initial value of bloc', () {
+        truthDB['key'] =
+            BehaviorSubject.seeded(createFreshValue('key', content: 'seeded'));
+        initialKey = 'key';
+        setUpBloc();
 
-      test('during truth source write will emit both values after write', () {
-        //
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            // No initial loading state, first state is the seeded value
+            isStateWith(
+                isLoading: false, content: 'seeded', source: Source.fresh),
+            isStateWith(
+                isLoading: true, content: 'seeded', source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'fresh', source: Source.fresh),
+          ]),
+        );
+
+        currentContent = 'fresh';
+        bloc.reload();
+      });
+
+      test('after key update can come from seeded stream, tagged as cache', () {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            isStateWith(
+                isLoading: true, content: 'seeded', source: Source.cache),
+            isStateWith(
+                isLoading: false, content: 'fresh', source: Source.fresh),
+          ]),
+        );
+
+        truthDB['key'] =
+            BehaviorSubject.seeded(createFreshValue('key', content: 'seeded'));
+        currentContent = 'fresh';
+        bloc.key = 'key';
+      });
+
+      test('after error can come from seeded stream', () async {
+        initialKey = 'key';
+        setUpBloc();
+
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            // Load but immediately throw error
+            isInitialLoadingState('key'),
+            isStateWhere(isLoading: false, error: isStateError, value: isNull),
+            // Reload with seeded truth value and complete successfully
+            isStateWhere(isLoading: true, error: isStateError, value: isNull),
+            isStateWith(
+                isLoading: true,
+                content: 'seeded',
+                source: Source.cache,
+                error: isStateError),
+            isStateWith(
+                isLoading: false,
+                content: 'success',
+                source: Source.fresh,
+                error: isNull),
+          ]),
+        );
+
+        // Load but immediately throw error
+        currentContent = 'success';
+        freshValueThrowable.value = StateError('test error');
+        bloc.reload();
+        await untilDone(bloc);
+
+        // Reload with seeded truth value and complete successfully
+        truthDB['key']!.value = createFreshValue('key', content: 'seeded');
+        freshValueThrowable.value = null;
+        bloc.reload();
+      });
+
+      test('can emit while fresh source is loading, tagged as cache', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            // Emit from truth source before fresh source emits
+            isStateWhere(
+                isLoading: true,
+                value: isValueWith(content: 'loading', count: 1),
+                source: Source.cache),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(content: 'first', count: 1),
+                source: Source.fresh),
+            // Subsequent emits from direct truth then fresh source.
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(content: 'fromTruth', count: 1),
+                source: Source.fresh),
+            isStateWhere(
+                isLoading: false,
+                value: isValueWith(content: 'second', count: 1),
+                source: Source.fresh),
+          ]),
+        );
+
+        // Emit from truth source before fresh source emits
+        final freshSink = streamFreshSource();
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        truthDB['key']!.value = createFreshValue('key', content: 'loading');
+        await pumpEventQueue();
+
+        freshSink.add((key) => 'first');
+        await pumpEventQueue();
+
+        // Subsequent emits from direct truth then fresh source.
+        truthDB['key']!.value = createFreshValue('key', content: 'fromTruth');
+        await pumpEventQueue();
+
+        freshSink.add((key) => 'second');
+      });
+
+      test('during truth source write will emit both values after', () async {
+        expectLater(
+          bloc.stream,
+          emitsInOrder(<dynamic>[
+            isInitialLoadingState('key'),
+            // New true value then actual fresh value are emitted in succession
+            // Since we cannot distinguish between them without potentially
+            // strict equality checks, both are tagged fresh
+            isStateWith(
+                isLoading: false, content: 'truth-1', source: Source.fresh),
+            isStateWith(
+                isLoading: false, content: 'fresh-1', source: Source.fresh),
+          ]),
+        );
+
+        currentContent = 'fresh-1';
+        truthWriteLocked.value = true;
+        bloc.key = 'key';
+        await pumpEventQueue();
+
+        expect(bloc.state, isInitialLoadingState('key'));
+
+        // Emit new true value while first is still being written
+        truthDB['key']!.value = createFreshValue('key', content: 'truth-1');
+        await pumpEventQueue();
+
+        truthWriteLocked.value = false;
       });
     });
 
