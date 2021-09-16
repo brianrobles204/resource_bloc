@@ -30,12 +30,25 @@ class _Lock<K extends Object, V> {
   final bool isLocked;
 }
 
+final EventTransformer<ResourceEvent> _restartable =
+    (events, mapper) => events.switchMap(mapper);
+final EventTransformer<ResourceEvent> _sequential =
+    (events, mapper) => events.asyncExpand(mapper);
+
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
   BaseResourceBloc({
     K? initialKey,
     this.initialValue,
   }) : super(_initialStateFor(initialKey, initialValue)) {
+    on<KeyUpdate<K>>(_onKeyUpdate, transformer: _restartable);
+    on<KeyError>(_onKeyError, transformer: _restartable);
+    on<Reload>(_onReload, transformer: _sequential);
+    on<ValueUpdate<K, V>>(_onValueUpdate, transformer: _sequential);
+    on<ErrorUpdate>(_onErrorUpdate, transformer: _restartable);
+    on<ResourceAction>(_onResourceAction, transformer: _sequential);
+    on<TruthSourceUpdate>(_onTruthSourceUpdate, transformer: _sequential);
+
     if (initialKey != null) {
       _setUpTruthSubscription(initialKey);
     }
@@ -83,11 +96,9 @@ abstract class BaseResourceBloc<K extends Object, V>
   /// source, and will be unlocked once the value has been emitted from the
   /// truth source.
   ///
-  /// Must not be awaited inside [mapEventToState], as it may never complete.
-  /// The value should only get unlocked once the state updates to the latest
-  /// truth value.
-  ///
-  /// Consider yielding the results of [flushState] if inside mapEventToState.
+  /// The value should only become unlocked once the state updates to the latest
+  /// truth value. Consider instead emitting the results of [flushTruthValue]
+  /// if inside mapEventToState or the [on] handler.
   ///
   /// While this is safe to call inside [mapActionToValue], consider yielding
   /// [mappedValue] instead to ensure the correct value is emitted.
@@ -96,17 +107,17 @@ abstract class BaseResourceBloc<K extends Object, V>
       _valueLock.firstWhere((lock) => !lock.isLocked);
 
   @protected
-  Stream<ResourceState<K, V>> flushState() async* {
+  Stream<V> flushTruthValue() async* {
     if (_valueLock.value.isLocked) {
       await _valueLock.firstWhere((lock) => lock.hasValue);
       if (key == _valueLock.value.key) {
-        yield _stateForTruthValue(_valueLock.value.value!);
+        yield _valueLock.value.value!;
       }
       _valueLock.value = _Lock.unlocked();
     }
   }
 
-  ResourceState<K, V> _stateForTruthValue(V value) {
+  ResourceState<K, V> _truthValueToState(V value) {
     assert(key != null);
     if (_isLoadingFresh) {
       return state.copyWithValue(
@@ -219,31 +230,14 @@ abstract class BaseResourceBloc<K extends Object, V>
     );
   }
 
-  @override
-  @mustCallSuper
-  Stream<ResourceState<K, V>> mapEventToState(ResourceEvent event) async* {
-    if (event is KeyUpdate<K>) {
-      yield* _mapKeyUpdateToState(event);
-    } else if (event is KeyError) {
-      yield* _mapKeyErrorToState(event);
-    } else if (event is Reload) {
-      yield* _mapReloadToState();
-    } else if (event is ValueUpdate<K, V>) {
-      yield* _mapValueUpdateToState(event);
-    } else if (event is ErrorUpdate) {
-      yield* _mapErrorUpdateToState(event);
-    } else if (event is ResourceAction) {
-      yield* _mapResourceActionToState(event);
-    } else if (event is TruthSourceUpdate) {
-      yield* _mapTruthSourceUpdateToState();
-    }
-  }
-
-  Stream<ResourceState<K, V>> _mapKeyUpdateToState(KeyUpdate<K> event) async* {
+  FutureOr<void> _onKeyUpdate(
+    KeyUpdate<K> event,
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     if (key != event.key) {
       await _closeAllSubscriptions();
 
-      yield _initialStateFor(event.key, initialValue);
+      emit(_initialStateFor(event.key, initialValue));
 
       _isLoadingFresh = true;
       _setUpTruthSubscription(event.key);
@@ -257,17 +251,23 @@ abstract class BaseResourceBloc<K extends Object, V>
     }
   }
 
-  Stream<ResourceState<K, V>> _mapKeyErrorToState(KeyError event) async* {
+  FutureOr<void> _onKeyError(
+    KeyError event,
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     await _closeAllSubscriptions();
 
-    yield ResourceState.withError(
+    emit(ResourceState.withError(
       event.error,
       key: null,
       isLoading: false,
-    );
+    ));
   }
 
-  Stream<ResourceState<K, V>> _mapReloadToState() async* {
+  FutureOr<void> _onReload(
+    Reload event,
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     if (_freshSubscription != null && _isLoadingFresh) {
       assert(() {
         print('INFO: Tried to reload while already reloading. Doing nothing.');
@@ -285,8 +285,8 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    yield* flushState();
-    yield state.copyWith(isLoading: true);
+    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
+    emit(state.copyWith(isLoading: true));
 
     await _closeFreshSubscriptions();
     _isLoadingFresh = true;
@@ -299,9 +299,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     _freshSource.value = readFreshSource(key);
   }
 
-  Stream<ResourceState<K, V>> _mapValueUpdateToState(
+  FutureOr<void> _onValueUpdate(
     ValueUpdate<K, V> event,
-  ) async* {
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     if (key != event.key) {
       assert(() {
         print('WARN: Tried to update value, but the current key \'$key\' does '
@@ -339,7 +340,7 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    yield* flushState();
+    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
     _valueLock.value = _Lock.locked();
 
     // Write to truth source, but don't await the write
@@ -348,21 +349,25 @@ abstract class BaseResourceBloc<K extends Object, V>
         .catchError((error) => add(ErrorUpdate(error, isValueValid: false)));
   }
 
-  Stream<ResourceState<K, V>> _mapErrorUpdateToState(ErrorUpdate event) async* {
+  FutureOr<void> _onErrorUpdate(
+    ErrorUpdate event,
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     await _closeAllSubscriptions();
 
-    yield state.copyWithError(
+    emit(state.copyWithError(
       event.error,
       isLoading: false,
       includeValue: event.isValueValid,
-    );
+    ));
   }
 
-  Stream<ResourceState<K, V>> _mapResourceActionToState(
+  FutureOr<void> _onResourceAction(
     ResourceAction event,
-  ) async* {
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
     if (_actionController == null) {
-      yield* flushState();
+      await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
       final key = this.key;
       final value = this.value;
       if (key != null && value != null) {
@@ -381,16 +386,11 @@ abstract class BaseResourceBloc<K extends Object, V>
     _actionController!.sink.add(event);
   }
 
-  Stream<ResourceState<K, V>> _mapTruthSourceUpdateToState() async* {
-    yield* flushState();
-  }
-
-  Future<void> _closeAllSubscriptions() async {
-    await _closeFreshSubscriptions();
-
-    await _truthSubscription?.cancel();
-    _truthSubscription = null;
-    if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
+  FutureOr<void> _onTruthSourceUpdate(
+    TruthSourceUpdate event,
+    Emitter<ResourceState<K, V>> emit,
+  ) async {
+    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
   }
 
   Future<void> _closeFreshSubscriptions() async {
@@ -401,6 +401,14 @@ abstract class BaseResourceBloc<K extends Object, V>
     _freshSubscription = null;
     _actionController = null;
     _isLoadingFresh = false;
+  }
+
+  Future<void> _closeAllSubscriptions() async {
+    await _closeFreshSubscriptions();
+
+    await _truthSubscription?.cancel();
+    _truthSubscription = null;
+    if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
   }
 
   @override

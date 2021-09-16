@@ -40,16 +40,20 @@ void main() {
       bloc.reload();
     });
 
-    test('from seeded truth source can be initial value of bloc', () {
-      bloc = TestResourceBloc(initialKey: 'key')
-        ..truthSources['key'] = BehaviorSubject.seeded(
-          bloc.createFreshValue('key', content: 'seeded'),
-        );
+    test('from seeded truth source can be initial value of bloc', () async {
+      bloc = TestResourceBloc(
+        initialKey: 'key',
+        truthSources: {
+          'key': BehaviorSubject.seeded(
+            bloc.createFreshValue('key', content: 'seeded'),
+          ),
+        },
+      );
 
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          // No initial loading state, first state is the seeded value
+          // No initial loading state emitted, first state is the seeded value
           isStateWith(
               isLoading: false, content: 'seeded', source: Source.fresh),
           isStateWith(isLoading: true, content: 'seeded', source: Source.fresh),
@@ -57,25 +61,41 @@ void main() {
         ]),
       );
 
+      // While initial loading state isn't emitted in stream, it is still
+      // reflected in the state.
+      expect(bloc.state, isInitialLoadingState('key'));
+
+      await pumpEventQueue();
+
       bloc.freshContent = 'fresh';
       bloc.reload();
     });
 
-    test('after key update can come from seeded stream, tagged as cache', () {
+    test('after key update can come from seeded stream as cache', () async {
+      bloc = TestResourceBloc(initialKey: 'first');
+
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          isInitialLoadingState('key'),
+          // Load normally
+          isInitialLoadingState('first'),
+          isStateWith(isLoading: false, content: 'orig', source: Source.fresh),
+          // Update key, load from seeded truth source
+          isInitialLoadingState('second'),
           isStateWith(isLoading: true, content: 'seeded', source: Source.cache),
           isStateWith(isLoading: false, content: 'fresh', source: Source.fresh),
         ]),
       );
 
-      bloc.truthSources['key'] = BehaviorSubject.seeded(
-        bloc.createFreshValue('key', content: 'seeded'),
+      bloc.freshContent = 'orig';
+      bloc.reload();
+      await untilDone(bloc);
+
+      bloc.truthSources['second'] = BehaviorSubject.seeded(
+        bloc.createFreshValue('second', content: 'seeded'),
       );
       bloc.freshContent = 'fresh';
-      bloc.key = 'key';
+      bloc.key = 'second';
     });
 
     test('after error can come from seeded stream', () async {

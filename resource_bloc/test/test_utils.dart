@@ -23,7 +23,9 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
   TestResourceBloc({
     InitialValue<String, Value>? initialValue,
     String? initialKey,
-  }) : super(
+    Map<String, BehaviorSubject<Value>>? truthSources,
+  })  : truthSources = truthSources ?? {},
+        super(
           initialValue: initialValue,
           initialKey: initialKey,
         );
@@ -31,7 +33,7 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
   var freshContent = 'content';
   FreshSource<String, Value>? freshSource;
 
-  final truthSources = <String, BehaviorSubject<Value>>{};
+  late final Map<String, BehaviorSubject<Value>> truthSources;
 
   var freshReadCount = 0;
   var truthReadCount = 0;
