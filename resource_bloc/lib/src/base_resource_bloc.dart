@@ -10,7 +10,7 @@ import 'resource_state.dart';
 typedef InitialValue<K extends Object, V> = V? Function(K key);
 
 class _Lock<K extends Object, V> {
-  const _Lock.withValue(this.key, this.value)
+  const _Lock.withValue(K this.key, V this.value)
       : hasValue = true,
         isLocked = true;
   const _Lock.locked()
