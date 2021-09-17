@@ -9,14 +9,16 @@ class TestAction extends ResourceAction {
     required this.activeAction,
     required this.doneAction,
     this.lock,
+    this.throwable,
   });
 
   final String activeAction;
   final String doneAction;
   final BehaviorSubject<bool>? lock;
+  final Object? throwable;
 
   @override
-  List<Object?> get props => [activeAction, doneAction];
+  List<Object?> get props => [activeAction, doneAction, lock, throwable];
 }
 
 class TestResourceBloc extends ResourceBloc<String, Value> {
@@ -28,7 +30,9 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
         super(
           initialValue: initialValue,
           initialKey: initialKey,
-        );
+        ) {
+    onAction<TestAction>(_onTestAction);
+  }
 
   var freshContent = 'content';
   FreshSource<String, Value>? freshSource;
@@ -38,6 +42,8 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
   var freshReadCount = 0;
   var truthReadCount = 0;
   var truthWriteCount = 0;
+  var actionStartCount = 0;
+  var actionFinishCount = 0;
 
   final freshValueLocked = BehaviorSubject<bool>.seeded(false);
   final truthReadLocked = BehaviorSubject<bool>.seeded(false);
@@ -114,16 +120,20 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     (truthSources[key] ??= BehaviorSubject()).value = value;
   }
 
-  @override
-  Stream<Value> mapActionToValue(ResourceAction action) async* {
-    if (action is TestAction) {
-      yield* mappedValue(
-          (value) => value.copyWith(action: action.activeAction));
-      if (action.lock != null) {
-        await action.lock!.firstWhere(_isUnlocked);
-      }
-      yield* mappedValue((value) => value.copyWith(action: action.doneAction));
+  FutureOr<void> _onTestAction(
+    TestAction action,
+    ActionEmitter<Value> emit,
+  ) async {
+    actionStartCount++;
+    await emit.value((value) => value.copyWith(action: action.activeAction));
+    if (action.lock != null) {
+      await action.lock!.firstWhere(_isUnlocked);
     }
+    if (action.throwable != null) {
+      throw action.throwable!;
+    }
+    await emit.value((value) => value.copyWith(action: action.doneAction));
+    actionFinishCount++;
   }
 
   @override

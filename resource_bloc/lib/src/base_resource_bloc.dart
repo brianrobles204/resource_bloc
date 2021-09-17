@@ -4,10 +4,20 @@ import 'package:bloc/bloc.dart';
 import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
 
+import 'action_bloc.dart';
 import 'resource_event.dart';
 import 'resource_state.dart';
 
 typedef InitialValue<K extends Object, V> = V? Function(K key);
+
+typedef ActionHandler<A extends ResourceAction, V> = FutureOr<void> Function(
+  A action,
+  ActionEmitter<V> emit,
+);
+
+abstract class ActionEmitter<V> implements Emitter<V> {
+  Future<void> value(V Function(V value) callback);
+}
 
 class _Lock<K extends Object, V> {
   const _Lock.withValue(K this.key, V this.value)
@@ -69,25 +79,41 @@ abstract class BaseResourceBloc<K extends Object, V>
   @protected
   Future<void> writeTruthSource(K key, V value);
 
-  @protected
-  Stream<V> transformActions(
-    Stream<ResourceAction> actions,
-    Stream<V> Function(ResourceAction) mapper,
-  ) {
-    return actions.flatMap(mapper);
-  }
+  final _actionHandlerRefs = <ActionHandlerRef<dynamic, V>>[];
+  final _valueLock = BehaviorSubject<_Lock<K, V>>.seeded(_Lock.unlocked());
+  bool _isLoadingFresh = false;
 
-  @protected
-  Stream<V> mapActionToValue(ResourceAction action) async* {
-    // NO OP
-  }
+  void onAction<A extends ResourceAction>(
+    ActionHandler<A, V> handler, {
+    EventTransformer<ResourceAction>? transformer,
+  }) {
+    assert(
+      !_actionHandlerRefs.any((handlerRef) => handlerRef.actionType == A),
+      'onAction<$A> was caught multiple times. '
+      'There should only be a single action handler per action type.',
+    );
 
-  @protected
-  Stream<V> mappedValue(V Function(V value) mapper) async* {
-    await untilValueUnlocked();
-    if (state.hasValue) {
-      yield mapper(state.requireValue);
-    }
+    final EventHandler<A, V> actionHandler = (event, emit) {
+      final actionEmitter = _ActionEmitter<V>(emit, getValue: () async {
+        await _untilValueUnlocked();
+        if (_isLoadingFresh && state.isLoading && !state.hasValue) {
+          await stream
+              .firstWhere((state) => !state.isLoading || state.hasValue);
+        }
+
+        if (state.hasValue) {
+          return value as V;
+        } else {
+          throw StateError('Bloc $this has no valid value');
+        }
+      });
+
+      return handler(event, actionEmitter);
+    };
+
+    _actionHandlerRefs.add(
+      ActionHandlerRef<A, V>(actionHandler, transformer: transformer),
+    );
   }
 
   /// Future that completes when the value is unlocked.
@@ -97,17 +123,15 @@ abstract class BaseResourceBloc<K extends Object, V>
   /// truth source.
   ///
   /// The value should only become unlocked once the state updates to the latest
-  /// truth value. Consider instead emitting the results of [flushTruthValue]
+  /// truth value. Consider instead emitting the results of [_flushTruthValue]
   /// if inside mapEventToState or the [on] handler.
   ///
   /// While this is safe to call inside [mapActionToValue], consider yielding
   /// [mappedValue] instead to ensure the correct value is emitted.
-  @protected
-  Future<void> untilValueUnlocked() =>
+  Future<void> _untilValueUnlocked() =>
       _valueLock.firstWhere((lock) => !lock.isLocked);
 
-  @protected
-  Stream<V> flushTruthValue() async* {
+  Stream<V> _flushTruthValue() async* {
     if (_valueLock.value.isLocked) {
       await _valueLock.firstWhere((lock) => lock.hasValue);
       if (key == _valueLock.value.key) {
@@ -166,11 +190,8 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   StreamSubscription<V>? _truthSubscription;
   StreamSubscription<V>? _freshSubscription;
-  StreamController<ResourceAction>? _actionController;
+  ActionBloc<V>? _actionBloc;
   final _freshSource = BehaviorSubject<Stream<V>>();
-  bool _isLoadingFresh = false;
-
-  final _valueLock = BehaviorSubject<_Lock<K, V>>.seeded(_Lock.unlocked());
 
   void _setUpTruthSubscription(K newKey) {
     assert(_truthSubscription == null);
@@ -187,39 +208,24 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   void _setUpFreshSubscription(K key) {
     assert(_freshSubscription == null);
-    assert(_actionController == null);
+    assert(_actionBloc == null);
 
-    _actionController = ReplaySubject();
-    final actionLock = Completer();
-    final actionStream = () async* {
-      await actionLock.future;
-      yield* transformActions(
-        _actionController!.stream,
-        mapActionToValue,
-      );
-    }();
+    _actionBloc = ActionBloc(_actionHandlerRefs);
 
     void tryUnlockAction() async {
-      if (!actionLock.isCompleted) {
-        await untilValueUnlocked();
-        _isLoadingFresh = false;
-        actionLock.complete();
-      }
-    }
-
-    if (!_isLoadingFresh) {
-      tryUnlockAction();
+      await _untilValueUnlocked();
+      _isLoadingFresh = false;
     }
 
     final freshActionStream = SwitchLatestStream(_freshSource)
         .asBroadcastStream()
         .doOnData((_) => tryUnlockAction())
-        .mergeWith([actionStream]);
+        .mergeWith([_actionBloc!.valueStream]);
 
     var hasEmittedValue = false;
     _freshSubscription = freshActionStream.listen(
       (value) async {
-        await untilValueUnlocked();
+        await _untilValueUnlocked();
         if (value == state.value && hasEmittedValue) return;
         hasEmittedValue = true;
         add(ValueUpdate(key, value));
@@ -285,7 +291,7 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
+    await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
     emit(state.copyWith(isLoading: true));
 
     await _closeFreshSubscriptions();
@@ -340,7 +346,7 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
+    await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
     _valueLock.value = _Lock.locked();
 
     // Write to truth source, but don't await the write
@@ -366,8 +372,8 @@ abstract class BaseResourceBloc<K extends Object, V>
     ResourceAction event,
     Emitter<ResourceState<K, V>> emit,
   ) async {
-    if (_actionController == null) {
-      await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
+    if (_actionBloc == null) {
+      await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
       final key = this.key;
       final value = this.value;
       if (key != null && value != null) {
@@ -383,23 +389,23 @@ abstract class BaseResourceBloc<K extends Object, V>
       }
     }
 
-    _actionController!.sink.add(event);
+    _actionBloc!.add(event);
   }
 
   FutureOr<void> _onTruthSourceUpdate(
     TruthSourceUpdate event,
     Emitter<ResourceState<K, V>> emit,
   ) async {
-    await emit.forEach<V>(flushTruthValue(), onData: _truthValueToState);
+    await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
   }
 
   Future<void> _closeFreshSubscriptions() async {
     await _freshSubscription?.cancel();
-    await _actionController?.close();
+    await _actionBloc?.close();
     if (!_freshSource.isClosed) _freshSource.value = Stream.empty();
 
     _freshSubscription = null;
-    _actionController = null;
+    _actionBloc = null;
     _isLoadingFresh = false;
   }
 
@@ -417,5 +423,53 @@ abstract class BaseResourceBloc<K extends Object, V>
     await _freshSource.close();
     await _valueLock.close();
     return super.close();
+  }
+}
+
+class _ActionEmitter<V> implements ActionEmitter<V> {
+  _ActionEmitter(
+    this.emit, {
+    required this.getValue,
+  });
+
+  final Emitter<V> emit;
+  final Future<V> Function() getValue;
+
+  @override
+  Future<void> onEach<T>(
+    Stream<T> stream, {
+    required void Function(T data) onData,
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) =>
+      emit.onEach(stream, onData: onData, onError: onError);
+
+  @override
+  Future<void> forEach<T>(
+    Stream<T> stream, {
+    required V Function(T data) onData,
+    V Function(Object error, StackTrace stackTrace)? onError,
+  }) =>
+      emit.forEach(stream, onData: onData, onError: onError);
+
+  @override
+  bool get isDone => emit.isDone;
+
+  @override
+  void call(V state) => emit.call(state);
+
+  @override
+  Future<void> value(V Function(V value) callback) async {
+    try {
+      final _value = await getValue();
+      if (!isDone) {
+        call(callback(_value));
+      }
+    } on StateError catch (e) {
+      assert(() {
+        print(e.message);
+        return true;
+      }());
+      return;
+    }
   }
 }
