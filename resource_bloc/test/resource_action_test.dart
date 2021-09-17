@@ -92,7 +92,61 @@ void main() {
       await pumpEventQueue();
     });
 
-    test('will not use initial value', () {});
+    test('will use initial value', () async {
+      bloc = TestResourceBloc(
+        initialKey: 'key',
+        initialValue: (key) => createFreshValue(key, content: '$key-init'),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Adding a resource action should work using initial value
+          isStateWith(
+              isLoading: false, content: 'key-init', action: {0: 'loading'}),
+          isStateWith(
+              isLoading: false, content: 'key-init', action: {0: 'done'}),
+          emitsDone,
+        ]),
+      );
+
+      await pumpEventQueue();
+      expect(
+        bloc.state,
+        isStateWith(
+            isLoading: false, key: 'key', content: 'key-init', action: isEmpty),
+      );
+
+      bloc.add(TestAction(0, loading: 'loading', done: 'done'));
+      await pumpEventQueue();
+
+      bloc.close();
+    });
+
+    test('will use cached truth value', () async {
+      bloc = TestResourceBloc(initialKey: 'key');
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Adding a resource action should work using cached truth value
+          isStateWith(isLoading: false, content: 'cache', action: isEmpty),
+          isStateWith(
+              isLoading: false, content: 'cache', action: {0: 'loading'}),
+          isStateWith(isLoading: false, content: 'cache', action: {0: 'done'}),
+          emitsDone,
+        ]),
+      );
+
+      bloc.getTruthSource('key').value =
+          bloc.createFreshValue('key', content: 'cache');
+      await pumpEventQueue();
+
+      bloc.add(TestAction(0, loading: 'loading', done: 'done'));
+      await pumpEventQueue();
+
+      bloc.close();
+    });
 
     test('will wait until after reload before acting', () {});
 

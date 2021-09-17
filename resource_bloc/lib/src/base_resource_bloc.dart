@@ -50,7 +50,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   BaseResourceBloc({
     K? initialKey,
     this.initialValue,
-  }) : super(_initialStateFor(initialKey, initialValue)) {
+  }) : super(_initialStateFor(initialKey, initialValue, isLoading: false)) {
     on<KeyUpdate<K>>(_onKeyUpdate, transformer: _restartable);
     on<KeyError>(_onKeyError, transformer: _restartable);
     on<Reload>(_onReload, transformer: _sequential);
@@ -160,8 +160,9 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   static ResourceState<K, V> _initialStateFor<K extends Object, V>(
     K? key,
-    InitialValue<K, V>? initialValue,
-  ) {
+    InitialValue<K, V>? initialValue, {
+    required bool isLoading,
+  }) {
     if (key == null) {
       return ResourceState.initial();
     } else {
@@ -181,7 +182,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
       if (value != null) {
         return ResourceState.withValue(key, value,
-            isLoading: true, source: Source.fresh);
+            isLoading: isLoading, source: Source.cache);
       } else {
         return ResourceState.loading(key);
       }
@@ -243,7 +244,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     if (key != event.key) {
       await _closeAllSubscriptions();
 
-      emit(_initialStateFor(event.key, initialValue));
+      emit(_initialStateFor(event.key, initialValue, isLoading: true));
 
       _isLoadingFresh = true;
       _setUpTruthSubscription(event.key);

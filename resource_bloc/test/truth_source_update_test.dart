@@ -16,6 +16,15 @@ void main() {
       bloc.close();
     });
 
+    Value createFreshValue(
+      String key, {
+      int? count,
+      String? content,
+      Map<int, String>? action,
+    }) =>
+        Value(key, count ?? bloc.freshReadCount,
+            content: content ?? bloc.freshContent, action: action ?? {});
+
     test('can emit before reload is called', () async {
       bloc = TestResourceBloc(initialKey: 'key');
 
@@ -40,6 +49,27 @@ void main() {
       bloc.reload();
     });
 
+    test('are emitted after initial value', () async {
+      bloc = TestResourceBloc(
+        initialValue: (key) => createFreshValue(key, content: '$key-init'),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isStateWith(
+              isLoading: true, content: 'key-init', source: Source.cache),
+          isStateWith(isLoading: true, content: 'cache', source: Source.cache),
+          isStateWith(isLoading: false, content: 'fresh', source: Source.fresh),
+        ]),
+      );
+
+      bloc.getTruthSource('key').value =
+          bloc.createFreshValue('key', content: 'cache');
+      bloc.freshContent = 'fresh';
+      bloc.key = 'key';
+    });
+
     test('from seeded truth source can be initial value of bloc', () async {
       bloc = TestResourceBloc(
         initialKey: 'key',
@@ -62,7 +92,7 @@ void main() {
       );
 
       // While initial loading state isn't emitted in stream, it is still
-      // reflected in the state.
+      // reflected as the very first state of the bloc.
       expect(bloc.state, isInitialLoadingState('key'));
 
       await pumpEventQueue();

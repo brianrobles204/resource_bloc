@@ -46,6 +46,12 @@ void main() {
         initialValue: (key) => createFreshValue(key, content: '$key-loading'),
       );
 
+      // State should already be initial value state
+      expect(
+        bloc.state,
+        isStateWith(isLoading: false, name: 'first', content: 'first-loading'),
+      );
+
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
@@ -82,11 +88,14 @@ void main() {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
+          // Throw initial value on init
           isInitialLoadingState('first'),
           isStateWith(isLoading: false, name: 'first', content: 'first-ready'),
+          // Throw initial value after key change
           isInitialLoadingState('second'),
           isStateWith(
               isLoading: false, name: 'second', content: 'second-ready'),
+          // Successful initial value after key change
           isStateWith(isLoading: true, name: 'third', content: 'third-loading'),
           isStateWith(isLoading: false, name: 'third', content: 'third-ready'),
         ]),
