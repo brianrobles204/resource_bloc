@@ -5,20 +5,22 @@ import 'package:rxdart/rxdart.dart';
 import 'package:test/test.dart';
 
 class TestAction extends ResourceAction {
-  TestAction({
-    required this.activeAction,
-    required this.doneAction,
+  TestAction(
+    this.index, {
+    required this.loading,
+    required this.done,
     this.lock,
     this.throwable,
   });
 
-  final String activeAction;
-  final String doneAction;
+  final int index;
+  final String loading;
+  final String done;
   final BehaviorSubject<bool>? lock;
   final Object? throwable;
 
   @override
-  List<Object?> get props => [activeAction, doneAction, lock, throwable];
+  List<Object?> get props => [index, loading, done, lock, throwable];
 }
 
 class TestResourceBloc extends ResourceBloc<String, Value> {
@@ -57,10 +59,10 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     String key, {
     int? count,
     String? content,
-    String? action,
+    Map<int, String>? action,
   }) =>
       Value(key, count ?? freshReadCount,
-          content: content ?? freshContent, action: action);
+          content: content ?? freshContent, action: action ?? {});
 
   bool _isUnlocked(bool isLocked) => !isLocked;
 
@@ -125,14 +127,18 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     ActionEmitter<Value> emit,
   ) async {
     actionStartCount++;
-    await emit.value((value) => value.copyWith(action: action.activeAction));
+    await emit.value(
+      (value) => value.copyWithAction(action.index, action.loading),
+    );
     if (action.lock != null) {
       await action.lock!.firstWhere(_isUnlocked);
     }
     if (action.throwable != null) {
       throw action.throwable!;
     }
-    await emit.value((value) => value.copyWith(action: action.doneAction));
+    await emit.value(
+      (value) => value.copyWithAction(action.index, action.done),
+    );
     actionFinishCount++;
   }
 
@@ -154,22 +160,23 @@ class Value {
   final String name;
   final int count;
   final String content;
-  final String? action;
-
-  static const _kPreserveField = r'_$PRESERVE_FIELD';
+  final Map<int, String> action;
 
   Value copyWith({
     String? name,
     int? count,
     String? content,
-    String? action = _kPreserveField,
+    Map<int, String>? action,
   }) =>
       Value(
         name ?? this.name,
         count ?? this.count,
         content: content ?? this.content,
-        action: action != _kPreserveField ? action : this.action,
+        action: action ?? this.action,
       );
+
+  Value copyWithAction(int index, String action) =>
+      copyWith(action: {...this.action, index: action});
 
   @override
   String toString() =>
@@ -193,14 +200,20 @@ Matcher isStateWith({
   String? name,
   String? content,
   int? count,
+  Object? action,
   Object? error,
   Source? source,
 }) =>
     isStateWhere(
       isLoading: isLoading,
       key: key,
-      value: (name != null || content != null || count != null)
-          ? isValueWith(name: name, content: content, count: count)
+      value: [name, content, count, action].any((e) => e != null)
+          ? isValueWith(
+              name: name,
+              content: content,
+              count: count,
+              action: action,
+            )
           : null,
       error: error,
       source: source,

@@ -1,3 +1,4 @@
+import 'package:rxdart/rxdart.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -14,9 +15,82 @@ void main() {
       bloc.close();
     });
 
-    test('work after fresh load', () {});
+    Value createFreshValue(
+      String key, {
+      int? count,
+      String? content,
+      Map<int, String>? action,
+    }) =>
+        Value(key, count ?? bloc.freshReadCount,
+            content: content ?? bloc.freshContent, action: action ?? {});
 
-    test('work concurrently', () {});
+    test('work after fresh load', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, count: 1, action: isEmpty),
+          isStateWith(isLoading: false, count: 1, action: {0: 'loading'}),
+          isStateWith(isLoading: false, count: 1, action: {0: 'done'}),
+        ]),
+      );
+
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      bloc.add(TestAction(0, loading: 'loading', done: 'done'));
+    });
+
+    test('work concurrently', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, action: isEmpty),
+          // Intersperse loading and done
+          isStateWith(isLoading: false, action: {0: 'load-a'}),
+          isStateWith(isLoading: false, action: {0: 'load-a', 1: 'load-b'}),
+          isStateWith(isLoading: false, action: {0: 'done-a', 1: 'load-b'}),
+          isStateWith(isLoading: false, action: {0: 'done-a', 1: 'done-b'}),
+          // Finish load of one completely while another is loading
+          isStateWith(isLoading: false, action: {0: 'load-c', 1: 'done-b'}),
+          isStateWith(isLoading: false, action: {0: 'load-c', 1: 'load-d'}),
+          isStateWith(isLoading: false, action: {0: 'load-c', 1: 'done-d'}),
+          isStateWith(isLoading: false, action: {0: 'done-c', 1: 'done-d'}),
+        ]),
+      );
+
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      final aLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load-a', done: 'done-a', lock: aLock));
+      await pumpEventQueue();
+
+      final bLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(1, loading: 'load-b', done: 'done-b', lock: bLock));
+      await pumpEventQueue();
+
+      aLock.value = false;
+      await pumpEventQueue();
+
+      bLock.value = false;
+      await pumpEventQueue();
+
+      final cLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load-c', done: 'done-c', lock: cLock));
+      await pumpEventQueue();
+
+      final dLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(1, loading: 'load-d', done: 'done-d', lock: dLock));
+      await pumpEventQueue();
+
+      dLock.value = false;
+      await pumpEventQueue();
+
+      cLock.value = false;
+      await pumpEventQueue();
+    });
 
     test('will not use initial value', () {});
 

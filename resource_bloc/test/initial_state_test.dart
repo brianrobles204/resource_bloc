@@ -31,7 +31,7 @@ void main() {
       bloc.add(ValueUpdate('key', bloc.createFreshValue('key')));
       await pumpEventQueue();
 
-      bloc.add(TestAction(activeAction: 'active', doneAction: 'done'));
+      bloc.add(TestAction(0, loading: 'active', done: 'done'));
       await pumpEventQueue();
 
       await bloc.close();
@@ -40,6 +40,8 @@ void main() {
       expect(bloc.freshReadCount, equals(0));
       expect(bloc.truthReadCount, equals(0));
       expect(bloc.truthWriteCount, equals(0));
+      expect(bloc.actionStartCount, equals(0));
+      expect(bloc.actionFinishCount, equals(0));
     });
 
     test('reflects the initial key if provided', () {

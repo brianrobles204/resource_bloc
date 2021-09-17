@@ -18,10 +18,10 @@ void main() {
       String key, {
       int? count,
       String? content,
-      String? action,
+      Map<int, String>? action,
     }) =>
         Value(key, count ?? bloc.freshReadCount,
-            content: content ?? bloc.freshContent, action: action);
+            content: content ?? bloc.freshContent, action: action ?? {});
 
     test('returning null should emit loading state with no value', () {
       bloc = TestResourceBloc(

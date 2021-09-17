@@ -6,6 +6,7 @@ import 'reload_test.dart' as reload_test;
 import 'value_update_test.dart' as value_update_test;
 import 'error_update_test.dart' as error_update_test;
 import 'truth_source_update_test.dart' as truth_source_update_test;
+import 'resource_action_test.dart' as resource_action_test;
 
 void main() {
   initial_state_test.main();
@@ -16,4 +17,5 @@ void main() {
   value_update_test.main();
   error_update_test.main();
   truth_source_update_test.main();
+  resource_action_test.main();
 }
