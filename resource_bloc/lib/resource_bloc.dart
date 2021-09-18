@@ -2,6 +2,7 @@
 /// and a network
 library resource_bloc;
 
+export 'src/action_handler.dart';
 export 'src/base_resource_bloc.dart';
 export 'src/resource_bloc.dart';
 export 'src/resource_event.dart';

@@ -1,22 +1,32 @@
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
 
+import 'action_handler.dart';
 import 'resource_event.dart';
 
-class ActionHandlerRef<A extends ResourceAction, V> {
-  ActionHandlerRef(this.handler, {required this.transformer});
+typedef ValueGetter<V> = Future<V> Function();
 
-  final EventHandler<A, V> handler;
+class ActionHandlerRef<A extends ResourceAction, V> {
+  ActionHandlerRef(
+    this.handler, {
+    required this.transformer,
+    required this.getValue,
+  });
+
+  final ActionHandler<A, V> handler;
   final EventTransformer<ResourceAction>? transformer;
+  final ValueGetter<V> getValue;
 
   Type get actionType => A;
 
   void registerOn(ActionBloc<V> bloc) {
     final EventHandler<A, ActionState<V>> _handler = (event, emit) {
-      final _emit = _ActionStateEmitter(emit);
-      return handler(event, _emit);
+      final actionEmit = _ActionEmitter<V>(emit, getValue: getValue);
+      return handler(event, actionEmit);
     };
 
     bloc.on<A>(_handler, transformer: transformer);
@@ -60,47 +70,27 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
       stream.whereType<_Value<V>>().map((state) => state.value);
 }
 
-abstract class _MapEmitter<Source, Target> implements Emitter<Target> {
-  _MapEmitter(this.source);
+class _ActionEmitter<V> extends ActionEmitter<V> {
+  _ActionEmitter(
+    this.emit, {
+    required this.getValue,
+  });
 
-  final Emitter<Source> source;
-
-  /// Maps the incoming values from the target emitter into a
-  /// type the source can understand.
-  Source map(Target value);
-
-  @override
-  Future<void> onEach<T>(
-    Stream<T> stream, {
-    required void Function(T data) onData,
-    void Function(Object error, StackTrace stackTrace)? onError,
-  }) =>
-      source.onEach<T>(stream, onData: onData, onError: onError);
+  final Emitter<ActionState<V>> emit;
+  final ValueGetter<V> getValue;
 
   @override
-  Future<void> forEach<T>(
-    Stream<T> stream, {
-    required Target Function(T data) onData,
-    Target Function(Object error, StackTrace stackTrace)? onError,
-  }) =>
-      source.forEach<T>(
-        stream,
-        onData: (data) => map(onData(data)),
-        onError: onError != null
-            ? (error, stacktrace) => map(onError(error, stacktrace))
-            : null,
-      );
+  Future<V> get value => getValue();
 
   @override
-  bool get isDone => source.isDone;
+  bool get isDone => emit.isDone;
 
   @override
-  void call(Target state) => source.call(map(state));
-}
-
-class _ActionStateEmitter<V> extends _MapEmitter<ActionState<V>, V> {
-  _ActionStateEmitter(Emitter<ActionState<V>> source) : super(source);
-
-  @override
-  ActionState<V> map(V value) => ActionState.value(value);
+  Future<void> call(V Function(V value) callback) async {
+    final origValue = await value;
+    if (!isDone) {
+      final newValue = callback(origValue);
+      emit(ActionState.value(newValue));
+    }
+  }
 }

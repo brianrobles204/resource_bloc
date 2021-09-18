@@ -5,23 +5,11 @@ import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'action_bloc.dart';
+import 'action_handler.dart';
 import 'resource_event.dart';
 import 'resource_state.dart';
 
 typedef InitialValue<K extends Object, V> = V? Function(K key);
-
-typedef ActionHandler<A extends ResourceAction, V> = FutureOr<void> Function(
-  A action,
-  ActionEmitter<V> emit,
-);
-
-abstract class ActionEmitter<V> {
-  Future<V> get value;
-
-  bool get isDone;
-
-  Future<void> call(V Function(V value) callback);
-}
 
 class _Lock<K extends Object, V> {
   const _Lock.withValue(K this.key, V this.value)
@@ -97,26 +85,20 @@ abstract class BaseResourceBloc<K extends Object, V>
       'There should only be a single action handler per action type.',
     );
 
-    final EventHandler<A, V> actionHandler = (event, emit) {
-      final actionEmitter = _ActionEmitter<V>(emit, getValue: () async {
+    final handlerRef = ActionHandlerRef<A, V>(
+      handler,
+      transformer: transformer,
+      getValue: () async {
         await _untilValueUnlocked();
         if (!_isReadyForAction()) {
           await stream.firstWhere((state) => _isReadyForAction());
         }
 
-        if (state.hasValue) {
-          return value as V;
-        } else {
-          throw StateError('Bloc $this has no valid value');
-        }
-      });
-
-      return handler(event, actionEmitter);
-    };
-
-    _actionHandlerRefs.add(
-      ActionHandlerRef<A, V>(actionHandler, transformer: transformer),
+        return state.requireValue;
+      },
     );
+
+    _actionHandlerRefs.add(handlerRef);
   }
 
   bool _isReadyForAction() =>
@@ -429,37 +411,5 @@ abstract class BaseResourceBloc<K extends Object, V>
     await _freshSource.close();
     await _valueLock.close();
     return super.close();
-  }
-}
-
-class _ActionEmitter<V> extends ActionEmitter<V> {
-  _ActionEmitter(
-    this.emit, {
-    required this.getValue,
-  });
-
-  final Emitter<V> emit;
-  final Future<V> Function() getValue;
-
-  @override
-  Future<V> get value => getValue();
-
-  @override
-  bool get isDone => emit.isDone;
-
-  @override
-  Future<void> call(V Function(V value) callback) async {
-    try {
-      final _value = await getValue();
-      if (!isDone) {
-        emit(callback(_value));
-      }
-    } on StateError catch (e) {
-      assert(() {
-        print(e.message);
-        return true;
-      }());
-      return;
-    }
   }
 }
