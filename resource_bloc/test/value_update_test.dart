@@ -90,18 +90,22 @@ void main() {
       bloc.close();
     });
 
-    test('are ignored during initial fresh read only', () async {
+    test('are ignored during initial fresh read without fresh value', () async {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
           // Try updating during initial fresh read, should do nothing
           isInitialLoadingState('key'),
           isStateWith(isLoading: false, content: 'first'),
-          // Try updated during subsequent fresh read, should reflect
+          // Try updating during subsequent fresh read, should reflect
           isStateWith(isLoading: true, content: 'first'),
           isStateWith(isLoading: false, content: 'second'),
           isStateWith(isLoading: false, content: 'insert-2'),
           isStateWith(isLoading: false, content: 'third'),
+          // Try updating during fresh read but with fresh value, should reflect
+          isStateWith(isLoading: true, content: 'third'),
+          isStateWith(isLoading: true, content: 'insert-3'),
+          isStateWith(isLoading: false, content: 'fourth'),
           emitsDone,
         ]),
       );
@@ -140,6 +144,21 @@ void main() {
       expect(bloc.state, isStateWith(isLoading: false, content: 'insert-2'));
 
       freshSink.add((key) => 'third');
+      await untilDone(bloc);
+
+      // Add value update during fresh read but with fresh value available
+      bloc.applyValueFreshSource();
+      bloc.freshValueLocked.value = true;
+      bloc.freshContent = 'fourth';
+      bloc.reload();
+      await pumpEventQueue();
+
+      bloc.add(
+        ValueUpdate('key', bloc.createFreshValue('key', content: 'insert-3')),
+      );
+      await pumpEventQueue();
+
+      bloc.freshValueLocked.value = false;
       await untilDone(bloc);
 
       bloc.close();

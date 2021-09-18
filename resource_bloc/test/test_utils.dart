@@ -81,7 +81,9 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
   StreamSink<String Function(String)> applyStreamFreshSource() {
     final sink = StreamController<String Function(String)>.broadcast();
     freshSource = (key) => sink.stream.map(
-          (callback) => createFreshValue(key, content: callback(key)),
+          (callback) =>
+              value?.copyWith(content: callback(key), count: freshReadCount) ??
+              createFreshValue(key, content: callback(key)),
         );
     return sink;
   }

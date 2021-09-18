@@ -342,7 +342,7 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    if (_isLoadingFresh) {
+    if (_isLoadingFresh && state.source != Source.fresh) {
       assert(() {
         print('WARN: Tried to update value while the fresh source is running '
             'and no fresh value has been emitted yet. Avoid adding '

@@ -92,7 +92,7 @@ void main() {
       await pumpEventQueue();
     });
 
-    test('will use initial value', () async {
+    test('will use initial value if not loading', () async {
       bloc = TestResourceBloc(
         initialKey: 'key',
         initialValue: (key) => createFreshValue(key, content: '$key-init'),
@@ -123,7 +123,7 @@ void main() {
       bloc.close();
     });
 
-    test('will use cached truth value', () async {
+    test('will use cached truth value if not loading', () async {
       bloc = TestResourceBloc(initialKey: 'key');
 
       expectLater(
@@ -149,6 +149,104 @@ void main() {
     });
 
     test('will wait until after reload before acting', () {});
+
+    test('will wait until after load, even with initial value', () async {
+      bloc = TestResourceBloc(
+        initialValue: (key) => createFreshValue(key, content: '$key-init'),
+      );
+
+      final isInitialValueState =
+          isStateWith(isLoading: true, content: 'key-init', action: isEmpty);
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialValueState,
+          isStateWith(isLoading: false, content: 'ok', action: isEmpty),
+          isStateWith(isLoading: false, content: 'ok', action: {0: 'loading'}),
+          isStateWith(isLoading: false, content: 'ok', action: {0: 'done'}),
+        ]),
+      );
+
+      await pumpEventQueue();
+      expect(bloc.state, isInitialEmptyState);
+
+      bloc.freshContent = 'ok';
+      bloc.freshValueLocked.value = true;
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialValueState);
+
+      bloc.add(TestAction(0, loading: 'loading', done: 'done'));
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialValueState);
+      expect(bloc.actionStartCount, equals(1));
+      expect(bloc.actionFinishCount, equals(0));
+
+      bloc.freshValueLocked.value = false;
+    });
+
+    test('will wait until fresh value, even with available cache', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Normal load but with resource action dispatched in the middle
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: true, content: 'a', action: isEmpty),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          isStateWith(isLoading: false, content: 'x', action: {0: 'i'}),
+          isStateWith(isLoading: false, content: 'x', action: {0: 'j'}),
+          // Dispatch action after fresh / truth value updates should work
+          isStateWith(isLoading: false, content: 'b', action: {0: 'j'}),
+          isStateWith(isLoading: false, content: 'b', action: {0: 'k'}),
+          isStateWith(isLoading: false, content: 'y', action: {0: 'k'}),
+          isStateWith(isLoading: false, content: 'y', action: {0: 'l'}),
+          // Dispatch action after reload, actions should work as value is fresh
+          isStateWith(isLoading: true, content: 'y', action: {0: 'l'}),
+          isStateWith(isLoading: true, content: 'y', action: {0: 'm'}),
+          isStateWith(isLoading: true, content: 'y', action: {0: 'n'}),
+          isStateWith(isLoading: false, content: 'z', action: {0: 'n'}),
+        ]),
+      );
+
+      // Normal load but with resource action dispatched in the middle
+      bloc.getTruthSource('key').value = createFreshValue('key', content: 'a');
+      final firstSink = bloc.applyStreamFreshSource();
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      bloc.add(TestAction(0, loading: 'i', done: 'j'));
+      await pumpEventQueue();
+
+      firstSink.add((_) => 'x');
+      await pumpEventQueue();
+
+      // Dispatch action after fresh / truth value updates
+      bloc.getTruthSource('key').value = bloc.value!.copyWith(content: 'b');
+      await pumpEventQueue();
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'k', done: 'l', lock: actionLock));
+      await pumpEventQueue();
+
+      firstSink.add((_) => 'y');
+      await pumpEventQueue();
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      // Dispatch action during reload
+      final secondSink = bloc.applyStreamFreshSource();
+      bloc.reload();
+      await pumpEventQueue();
+
+      bloc.add(TestAction(0, loading: 'm', done: 'n'));
+      await pumpEventQueue();
+
+      secondSink.add((_) => 'z');
+    });
 
     test('will wait until after truth read before acting', () {});
 
