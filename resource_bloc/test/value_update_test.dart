@@ -171,6 +171,7 @@ void main() {
           isInitialLoadingState('key'),
           isStateWith(isLoading: false, content: 'first'),
           isStateWith(isLoading: false, content: 'second'),
+          isStateWith(isLoading: false, content: 'three'),
           emitsDone,
         ]),
       );
@@ -187,10 +188,16 @@ void main() {
       );
       await pumpEventQueue();
 
+      bloc.add(
+        ValueUpdate('key', bloc.createFreshValue('key', content: 'three')),
+      );
+      await pumpEventQueue();
+
       expect(bloc.state, isInitialLoadingState('key'));
       bloc.truthReadLocked.value = false;
       await untilDone(bloc);
       await untilDone(bloc); // second await for second value
+      await untilDone(bloc); // third value
 
       bloc.close();
     });
@@ -202,6 +209,7 @@ void main() {
           isInitialLoadingState('key'),
           isStateWith(isLoading: false, content: 'first'),
           isStateWith(isLoading: false, content: 'second'),
+          isStateWith(isLoading: false, content: 'three'),
           emitsDone,
         ]),
       );
@@ -218,10 +226,16 @@ void main() {
       );
       await pumpEventQueue();
 
+      bloc.add(
+        ValueUpdate('key', bloc.createFreshValue('key', content: 'three')),
+      );
+      await pumpEventQueue();
+
       expect(bloc.state, isInitialLoadingState('key'));
       bloc.truthWriteLocked.value = false;
       await untilDone(bloc);
       await untilDone(bloc); // second await for second value
+      await untilDone(bloc); // third value
 
       bloc.close();
     });
