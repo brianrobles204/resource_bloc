@@ -148,7 +148,30 @@ void main() {
       bloc.close();
     });
 
-    test('will wait until after reload before acting', () {});
+    test('will wait until after reload before acting', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Resource action dispatched during load, but only applied after load
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'done', action: isEmpty),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'load'}),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'done'}),
+        ]),
+      );
+
+      bloc.freshContent = 'done';
+      bloc.freshValueLocked.value = true;
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      bloc.add(TestAction(0, loading: 'load', done: 'done'));
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('key'));
+
+      bloc.freshValueLocked.value = false;
+    });
 
     test('will wait until after load, even with initial value', () async {
       bloc = TestResourceBloc(
@@ -192,7 +215,7 @@ void main() {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          // Normal load but with resource action dispatched in the middle
+          // Normal load with cache, but with action dispatched during load
           isInitialLoadingState('key'),
           isStateWith(isLoading: true, content: 'a', action: isEmpty),
           isStateWith(isLoading: false, content: 'x', action: isEmpty),
