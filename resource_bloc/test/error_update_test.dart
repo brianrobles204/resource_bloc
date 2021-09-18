@@ -116,7 +116,7 @@ void main() {
       bloc.close();
     });
 
-    test('during later truth read reflect in state, erase values', () async {
+    test('from later truth read reflect in state, erasing values', () async {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
@@ -149,9 +149,7 @@ void main() {
       bloc.getTruthSource('key').addError(StateError('error'));
     });
 
-    test('during truth write reflect in state, erasing values', () async {
-      bloc.freshContent = 'first';
-
+    test('from truth write reflect in state, erasing values', () async {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
@@ -173,6 +171,7 @@ void main() {
       );
 
       // Initial error on first write
+      bloc.freshContent = 'first';
       bloc.truthWriteThrowable = StateError('error');
       bloc.key = 'key';
       await untilDone(bloc);
@@ -185,6 +184,35 @@ void main() {
       bloc.freshContent = 'second';
       bloc.truthWriteThrowable = StateError('error');
       bloc.reload();
+    });
+
+    test('from fresh source during truth read reflect in state', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, with two emits from fresh source,
+          // one value, then one error during truth read
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'x', error: isNull),
+          isStateWith(isLoading: false, content: 'x', error: isStateError),
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.truthReadLocked.value = true;
+      final freshSink = bloc.applyStreamFreshSource();
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'x');
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('key')); // waiting for read
+
+      freshSink.addError(StateError('error'));
+      await pumpEventQueue();
+
+      bloc.truthReadLocked.value = false;
     });
 
     test('cancel further fresh or truth updates', () async {

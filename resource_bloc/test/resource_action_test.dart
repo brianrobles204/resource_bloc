@@ -1,3 +1,4 @@
+import 'package:resource_bloc/resource_bloc.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:test/test.dart';
 
@@ -271,15 +272,119 @@ void main() {
       secondSink.add((_) => 'z');
     });
 
-    test('will wait until after truth read before acting', () {});
+    test('will wait until after truth read before acting', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Resource action dispatched during truth read, applied after
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'done', action: isEmpty),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'load'}),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'done'}),
+        ]),
+      );
 
-    test('will wait until after truth write before acting', () {});
+      bloc.freshContent = 'done';
+      bloc.truthReadLocked.value = true;
+      bloc.key = 'key';
+      await pumpEventQueue();
 
-    test('have no effect after error', () {});
+      bloc.add(TestAction(0, loading: 'load', done: 'done'));
+      await pumpEventQueue();
 
-    test('have no effect after key error', () {});
+      expect(bloc.state, isInitialLoadingState('key'));
 
-    test('errors are passed to state', () {});
+      bloc.truthReadLocked.value = false;
+    });
+
+    test('will wait until after truth write before acting', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Resource action dispatched during truth write, applied after
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'done', action: isEmpty),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'load'}),
+          isStateWith(isLoading: false, content: 'done', action: {0: 'done'}),
+        ]),
+      );
+
+      bloc.freshContent = 'done';
+      bloc.truthWriteLocked.value = true;
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      bloc.add(TestAction(0, loading: 'load', done: 'done'));
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('key'));
+
+      bloc.truthWriteLocked.value = false;
+    });
+
+    test('have no effect after error', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialLoadingState('key'),
+          isStateWhere(isLoading: false, value: isNull, error: isStateError),
+          emitsDone,
+        ]),
+      );
+
+      bloc.freshValueThrowable = StateError('error');
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      bloc.add(TestAction(0, loading: 'load', done: 'done'));
+      await pumpEventQueue();
+
+      await bloc.close();
+    });
+
+    test('have no effect after key error', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isKeyErrorState,
+          emitsDone,
+        ]),
+      );
+
+      bloc.add(KeyError(StateError('error')));
+      await untilDone(bloc);
+
+      bloc.add(TestAction(0, loading: 'load', done: 'done'));
+      await pumpEventQueue();
+
+      await bloc.close();
+    });
+
+    test('errors are passed to state if without onCancel', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'fresh', action: isEmpty),
+          // Throw during resource action
+          isStateWith(isLoading: false, content: 'fresh', action: {0: 'load'}),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(content: 'fresh', action: {0: 'load'}),
+              error: isStateError),
+        ]),
+      );
+
+      bloc.freshContent = 'fresh';
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      bloc.add(TestAction(0,
+          loading: 'load', done: 'done', throwable: StateError('error')));
+    });
+
+    test('errors are routed to onCancel callback if provided', () {});
 
     test('that emit during truth read will reflect after first value', () {});
 

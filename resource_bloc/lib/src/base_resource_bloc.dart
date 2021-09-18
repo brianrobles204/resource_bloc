@@ -226,7 +226,10 @@ abstract class BaseResourceBloc<K extends Object, V>
         hasEmittedValue = true;
         add(ValueUpdate(key, value));
       },
-      onError: (Object error) => add(ErrorUpdate(error, isValueValid: true)),
+      onError: (Object error) async {
+        await _untilValueUnlocked();
+        add(ErrorUpdate(error, isValueValid: true));
+      },
       onDone: () => _isLoadingFresh = false,
       cancelOnError: true,
     );

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:meta/meta.dart';
-import 'package:rxdart/rxdart.dart';
 
 import 'action_handler.dart';
 import 'resource_event.dart';
@@ -28,7 +27,7 @@ class ActionHandlerRef<A extends ResourceAction, V> {
   void registerOn(ActionBloc<V> bloc, {required ValueGetter<V> getValue}) {
     final EventHandler<A, ActionState<V>> _handler = (event, emit) async {
       final actionEmit = _ActionEmitter<V>(emit, getValue: getValue);
-      final actionHandler = handler(event, actionEmit);
+      final actionHandler = Future(() => handler(event, actionEmit));
       final onCancel = this.onCancel;
 
       if (onCancel != null) {
@@ -41,7 +40,11 @@ class ActionHandlerRef<A extends ResourceAction, V> {
           bloc._cancelCallbacks.remove(emit);
         }
       } else {
-        return actionHandler;
+        try {
+          await actionHandler;
+        } catch (e) {
+          emit(_Error(e));
+        }
       }
     };
 
@@ -52,14 +55,10 @@ class ActionHandlerRef<A extends ResourceAction, V> {
 @sealed
 abstract class ActionState<V> extends Equatable {
   const ActionState();
-
-  factory ActionState.initial() => _Initial<V>._();
-
-  factory ActionState.value(V _value) => _Value<V>(_value);
 }
 
 class _Initial<V> extends ActionState<V> {
-  const _Initial._();
+  const _Initial();
 
   @override
   List<Object?> get props => [];
@@ -74,12 +73,21 @@ class _Value<V> extends ActionState<V> {
   List<Object?> get props => [value];
 }
 
+class _Error<V> extends ActionState<V> {
+  _Error(this.error);
+
+  final Object error;
+
+  @override
+  List<Object?> get props => [error];
+}
+
 class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
   ActionBloc({
     required Iterable<ActionHandlerRef<dynamic, V>> handlerRefs,
     required this.getValue,
     required this.writeValue,
-  }) : super(ActionState.initial()) {
+  }) : super(_Initial<V>()) {
     for (final handlerRef in handlerRefs) {
       handlerRef.registerOn(this, getValue: getValue);
     }
@@ -88,8 +96,21 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
   final ValueGetter<V> getValue;
   final ValueWriter<V> writeValue;
 
-  Stream<V> get valueStream =>
-      stream.whereType<_Value<V>>().map((state) => state.value);
+  V _toValue(ActionState<V> state) {
+    if (state is _Value<V>) {
+      return state.value;
+    } else {
+      if (state is _Error<V>) {
+        throw state.error;
+      } else {
+        throw StateError('The bloc has no valid value');
+      }
+    }
+  }
+
+  Stream<V> get valueStream => stream
+      .where((state) => state is _Value<V> || state is _Error<V>)
+      .map(_toValue);
 
   final _cancelCallbacks = <Object, CancelCallback<V>>{};
 
@@ -137,7 +158,7 @@ class _ActionEmitter<V> extends ActionEmitter<V> {
     final origValue = await value;
     if (!isDone) {
       final newValue = callback(origValue);
-      emit(ActionState.value(newValue));
+      emit(_Value<V>(newValue));
     }
   }
 }
