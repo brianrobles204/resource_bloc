@@ -127,7 +127,7 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     ActionEmitter<Value> emit,
   ) async {
     actionStartCount++;
-    await emit.value(
+    await emit(
       (value) => value.copyWithAction(action.index, action.loading),
     );
     if (action.lock != null) {
@@ -136,7 +136,7 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     if (action.throwable != null) {
       throw action.throwable!;
     }
-    await emit.value(
+    await emit(
       (value) => value.copyWithAction(action.index, action.done),
     );
     actionFinishCount++;
@@ -186,10 +186,11 @@ class Value {
 Future<void> untilDone(ResourceBloc bloc) =>
     bloc.stream.firstWhere((state) => !state.isLoading);
 
-final Matcher isInitialState = equals(ResourceState<String, Value>.initial());
+final Matcher isInitialEmptyState =
+    equals(ResourceState<String, Value>.initial(null, isLoading: false));
 
-Matcher isInitialLoadingState(String key) =>
-    equals(ResourceState<String, Value>.loading(key));
+Matcher isInitialLoadingState(String key, {bool isLoading = true}) =>
+    equals(ResourceState<String, Value>.initial(key, isLoading: isLoading));
 
 final Matcher isKeyErrorState = isStateWhere(
     isLoading: false, key: isNull, value: isNull, error: isStateError);

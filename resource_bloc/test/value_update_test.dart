@@ -19,11 +19,11 @@ void main() {
       expectLater(bloc.stream, emitsDone);
 
       // Add value update manually during initial state, with no key yet
-      expect(bloc.state, isInitialState);
+      expect(bloc.state, isInitialEmptyState);
       bloc.add(ValueUpdate('key', bloc.createFreshValue('key')));
       await pumpEventQueue();
 
-      expect(bloc.state, isInitialState);
+      expect(bloc.state, isInitialEmptyState);
       await bloc.close();
     });
 

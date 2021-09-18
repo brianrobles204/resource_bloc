@@ -16,7 +16,7 @@ void main() {
     });
 
     test('starts with initial state and no reads', () {
-      expect(bloc.state, isInitialState);
+      expect(bloc.state, isInitialEmptyState);
       expect(bloc.freshReadCount, equals(0));
       expect(bloc.truthReadCount, equals(0));
       expect(bloc.truthWriteCount, equals(0));
@@ -36,7 +36,7 @@ void main() {
 
       await bloc.close();
 
-      expect(bloc.state, isInitialState);
+      expect(bloc.state, isInitialEmptyState);
       expect(bloc.freshReadCount, equals(0));
       expect(bloc.truthReadCount, equals(0));
       expect(bloc.truthWriteCount, equals(0));
@@ -47,7 +47,7 @@ void main() {
     test('reflects the initial key if provided', () {
       bloc = TestResourceBloc(initialKey: 'first');
 
-      expect(bloc.state, isInitialLoadingState('first'));
+      expect(bloc.state, isInitialLoadingState('first', isLoading: false));
       expect(bloc.freshReadCount, equals(0));
       expect(bloc.truthReadCount, equals(0));
       expect(bloc.truthWriteCount, equals(0));

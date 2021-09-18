@@ -93,7 +93,7 @@ void main() {
 
       // While initial loading state isn't emitted in stream, it is still
       // reflected as the very first state of the bloc.
-      expect(bloc.state, isInitialLoadingState('key'));
+      expect(bloc.state, isInitialLoadingState('key', isLoading: false));
 
       await pumpEventQueue();
 

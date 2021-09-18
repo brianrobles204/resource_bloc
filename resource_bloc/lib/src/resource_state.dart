@@ -1,16 +1,10 @@
 import 'package:equatable/equatable.dart';
 
 class ResourceState<K extends Object, V> extends Equatable {
-  ResourceState.initial()
-      : isLoading = true,
-        key = null,
-        value = null,
-        source = null,
-        error = null;
-
-  ResourceState.loading(K this.key)
-      : isLoading = true,
-        value = null,
+  ResourceState.initial(
+    this.key, {
+    required this.isLoading,
+  })  : value = null,
         source = null,
         error = null;
 
