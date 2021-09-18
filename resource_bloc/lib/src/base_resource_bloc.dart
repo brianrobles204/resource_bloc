@@ -15,8 +15,12 @@ typedef ActionHandler<A extends ResourceAction, V> = FutureOr<void> Function(
   ActionEmitter<V> emit,
 );
 
-abstract class ActionEmitter<V> implements Emitter<V> {
-  Future<void> value(V Function(V value) callback);
+abstract class ActionEmitter<V> {
+  Future<V> get value;
+
+  bool get isDone;
+
+  Future<void> call(V Function(V value) callback);
 }
 
 class _Lock<K extends Object, V> {
@@ -96,9 +100,8 @@ abstract class BaseResourceBloc<K extends Object, V>
     final EventHandler<A, V> actionHandler = (event, emit) {
       final actionEmitter = _ActionEmitter<V>(emit, getValue: () async {
         await _untilValueUnlocked();
-        if (_isLoadingFresh && state.isLoading && !state.hasValue) {
-          await stream
-              .firstWhere((state) => !state.isLoading || state.hasValue);
+        if (!_isReadyForAction()) {
+          await stream.firstWhere((state) => _isReadyForAction());
         }
 
         if (state.hasValue) {
@@ -115,6 +118,10 @@ abstract class BaseResourceBloc<K extends Object, V>
       ActionHandlerRef<A, V>(actionHandler, transformer: transformer),
     );
   }
+
+  bool _isReadyForAction() =>
+      state.source == Source.fresh ||
+      (state.source == Source.cache && !state.isLoading);
 
   /// Future that completes when the value is unlocked.
   ///
@@ -163,9 +170,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     InitialValue<K, V>? initialValue, {
     required bool isLoading,
   }) {
-    if (key == null) {
-      return ResourceState.initial();
-    } else {
+    if (key != null) {
       final value = () {
         try {
           return initialValue?.call(key);
@@ -183,10 +188,10 @@ abstract class BaseResourceBloc<K extends Object, V>
       if (value != null) {
         return ResourceState.withValue(key, value,
             isLoading: isLoading, source: Source.cache);
-      } else {
-        return ResourceState.loading(key);
       }
     }
+
+    return ResourceState.initial(key, isLoading: isLoading);
   }
 
   StreamSubscription<V>? _truthSubscription;
@@ -427,7 +432,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 }
 
-class _ActionEmitter<V> implements ActionEmitter<V> {
+class _ActionEmitter<V> extends ActionEmitter<V> {
   _ActionEmitter(
     this.emit, {
     required this.getValue,
@@ -437,33 +442,17 @@ class _ActionEmitter<V> implements ActionEmitter<V> {
   final Future<V> Function() getValue;
 
   @override
-  Future<void> onEach<T>(
-    Stream<T> stream, {
-    required void Function(T data) onData,
-    void Function(Object error, StackTrace stackTrace)? onError,
-  }) =>
-      emit.onEach(stream, onData: onData, onError: onError);
-
-  @override
-  Future<void> forEach<T>(
-    Stream<T> stream, {
-    required V Function(T data) onData,
-    V Function(Object error, StackTrace stackTrace)? onError,
-  }) =>
-      emit.forEach(stream, onData: onData, onError: onError);
+  Future<V> get value => getValue();
 
   @override
   bool get isDone => emit.isDone;
 
   @override
-  void call(V state) => emit.call(state);
-
-  @override
-  Future<void> value(V Function(V value) callback) async {
+  Future<void> call(V Function(V value) callback) async {
     try {
       final _value = await getValue();
       if (!isDone) {
-        call(callback(_value));
+        emit(callback(_value));
       }
     } on StateError catch (e) {
       assert(() {
