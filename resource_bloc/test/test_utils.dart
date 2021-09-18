@@ -28,12 +28,13 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     InitialValue<String, Value>? initialValue,
     String? initialKey,
     Map<String, BehaviorSubject<Value>>? truthSources,
+    CancelCallback<Value>? onCancelAction,
   })  : truthSources = truthSources ?? {},
         super(
           initialValue: initialValue,
           initialKey: initialKey,
         ) {
-    onAction<TestAction>(_onTestAction);
+    onAction<TestAction>(_onTestAction, onCancel: onCancelAction);
   }
 
   var freshContent = 'content';

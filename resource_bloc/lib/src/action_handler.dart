@@ -7,6 +7,8 @@ typedef ActionHandler<A extends ResourceAction, V> = FutureOr<void> Function(
   ActionEmitter<V> emit,
 );
 
+typedef CancelCallback<V> = V Function(V value);
+
 abstract class ActionEmitter<V> {
   Future<V> get value;
 

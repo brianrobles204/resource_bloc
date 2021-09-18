@@ -8,25 +8,41 @@ import 'package:rxdart/rxdart.dart';
 import 'action_handler.dart';
 import 'resource_event.dart';
 
-typedef ValueGetter<V> = Future<V> Function();
+typedef ValueGetter<V> = Future<V> Function({required bool throwIfNone});
+
+typedef ValueWriter<V> = void Function(V value);
 
 class ActionHandlerRef<A extends ResourceAction, V> {
   ActionHandlerRef(
     this.handler, {
     required this.transformer,
-    required this.getValue,
+    required this.onCancel,
   });
 
   final ActionHandler<A, V> handler;
   final EventTransformer<ResourceAction>? transformer;
-  final ValueGetter<V> getValue;
+  final CancelCallback<V>? onCancel;
 
   Type get actionType => A;
 
-  void registerOn(ActionBloc<V> bloc) {
-    final EventHandler<A, ActionState<V>> _handler = (event, emit) {
+  void registerOn(ActionBloc<V> bloc, {required ValueGetter<V> getValue}) {
+    final EventHandler<A, ActionState<V>> _handler = (event, emit) async {
       final actionEmit = _ActionEmitter<V>(emit, getValue: getValue);
-      return handler(event, actionEmit);
+      final actionHandler = handler(event, actionEmit);
+      final onCancel = this.onCancel;
+
+      if (onCancel != null) {
+        try {
+          bloc._cancelCallbacks[emit] = onCancel;
+          await actionHandler;
+        } catch (e) {
+          await actionEmit((value) => onCancel(value));
+        } finally {
+          bloc._cancelCallbacks.remove(emit);
+        }
+      } else {
+        return actionHandler;
+      }
     };
 
     bloc.on<A>(_handler, transformer: transformer);
@@ -59,15 +75,46 @@ class _Value<V> extends ActionState<V> {
 }
 
 class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
-  ActionBloc(Iterable<ActionHandlerRef<dynamic, V>> handlerRefs)
-      : super(ActionState.initial()) {
+  ActionBloc({
+    required Iterable<ActionHandlerRef<dynamic, V>> handlerRefs,
+    required this.getValue,
+    required this.writeValue,
+  }) : super(ActionState.initial()) {
     for (final handlerRef in handlerRefs) {
-      handlerRef.registerOn(this);
+      handlerRef.registerOn(this, getValue: getValue);
     }
   }
 
+  final ValueGetter<V> getValue;
+  final ValueWriter<V> writeValue;
+
   Stream<V> get valueStream =>
       stream.whereType<_Value<V>>().map((state) => state.value);
+
+  final _cancelCallbacks = <Object, CancelCallback<V>>{};
+
+  @override
+  Future<void> close() async {
+    if (_cancelCallbacks.isNotEmpty) {
+      try {
+        final value = await getValue(throwIfNone: true);
+
+        for (final callback in List.of(_cancelCallbacks.values)) {
+          try {
+            writeValue(callback(value));
+          } catch (e, s) {
+            print('WARN: Error while writing values to truth source during '
+                'bloc close. Error: $e\n$s');
+            // Swallow error
+          }
+        }
+      } catch (e, s) {
+        print('INFO: No value available for cancel callback. Error: $e\n$s');
+        // Swallow error
+      }
+    }
+    return super.close();
+  }
 }
 
 class _ActionEmitter<V> extends ActionEmitter<V> {
@@ -80,7 +127,7 @@ class _ActionEmitter<V> extends ActionEmitter<V> {
   final ValueGetter<V> getValue;
 
   @override
-  Future<V> get value => getValue();
+  Future<V> get value => getValue(throwIfNone: false);
 
   @override
   bool get isDone => emit.isDone;

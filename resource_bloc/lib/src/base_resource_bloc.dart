@@ -78,6 +78,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   void onAction<A extends ResourceAction>(
     ActionHandler<A, V> handler, {
     EventTransformer<ResourceAction>? transformer,
+    CancelCallback<V>? onCancel,
   }) {
     assert(
       !_actionHandlerRefs.any((handlerRef) => handlerRef.actionType == A),
@@ -88,14 +89,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     final handlerRef = ActionHandlerRef<A, V>(
       handler,
       transformer: transformer,
-      getValue: () async {
-        await _untilValueUnlocked();
-        if (!_isReadyForAction()) {
-          await stream.firstWhere((state) => _isReadyForAction());
-        }
-
-        return state.requireValue;
-      },
+      onCancel: onCancel,
     );
 
     _actionHandlerRefs.add(handlerRef);
@@ -198,7 +192,21 @@ abstract class BaseResourceBloc<K extends Object, V>
     assert(_freshSubscription == null);
     assert(_actionBloc == null);
 
-    _actionBloc = ActionBloc(_actionHandlerRefs);
+    _actionBloc = ActionBloc(
+      handlerRefs: _actionHandlerRefs,
+      getValue: ({required bool throwIfNone}) async {
+        await _untilValueUnlocked();
+        if (throwIfNone) {
+          return state.requireValue;
+        } else {
+          if (!_isReadyForAction()) {
+            await stream.firstWhere((state) => _isReadyForAction());
+          }
+          return state.requireValue;
+        }
+      },
+      writeValue: (value) => writeTruthSource(key, value),
+    );
 
     void tryUnlockAction() async {
       await _untilValueUnlocked();
