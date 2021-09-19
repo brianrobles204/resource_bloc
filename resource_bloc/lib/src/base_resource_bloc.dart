@@ -90,10 +90,6 @@ abstract class BaseResourceBloc<K extends Object, V>
     _actionHandlerRefs.add(handlerRef);
   }
 
-  bool _isReadyForAction() =>
-      state.source == Source.fresh ||
-      (state.source == Source.cache && !state.isLoading);
-
   /// Future that completes when the value is unlocked.
   ///
   /// Value are considered locked while they are being written to the truth
@@ -208,27 +204,30 @@ abstract class BaseResourceBloc<K extends Object, V>
     assert(_freshSubscription == null);
     assert(_actionBloc == null);
 
-    V requireValue() {
+    void assertCorrectKey() {
       if (key != this.key) {
         throw StateError('Tried to read value from a different key.');
       }
+    }
 
+    V requireValue() {
+      assertCorrectKey();
       return state.requireValue;
     }
 
     _actionBloc = ActionBloc(
       handlerRefs: _actionHandlerRefs,
       getValue: ({required bool throwIfNone}) async {
-        if (key != this.key) {
-          throw StateError('Tried to read value from a different key.');
-        }
+        assertCorrectKey();
 
-        await _untilValueUnlocked();
         if (throwIfNone) {
           return requireValue();
         } else {
+          await _untilValueUnlocked();
+          assertCorrectKey();
           if (!_isReadyForAction()) {
-            await stream.firstWhere((state) => _isReadyForAction());
+            await stream
+                .firstWhere((state) => _isReadyForAction() || state.key != key);
           }
           return requireValue();
         }
@@ -262,6 +261,10 @@ abstract class BaseResourceBloc<K extends Object, V>
       cancelOnError: true,
     );
   }
+
+  bool _isReadyForAction() =>
+      state.source == Source.fresh ||
+      (state.source == Source.cache && !state.isLoading);
 
   FutureOr<void> _onKeyUpdate(
     KeyUpdate<K> event,

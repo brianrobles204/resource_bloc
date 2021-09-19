@@ -544,8 +544,155 @@ void main() {
       expect(bloc.actionFinishCount, equals(0));
     });
 
-    test('are cancelled when keys change, even while read is ongoing', () {});
+    test('are cancelled when keys change, even with ongoing read', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, add resource action while loading,
+          // but then switch keys while reading
+          isInitialLoadingState('first'),
+          // Second load finishes normally
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+          // Third load with key switch while resource action is loading, value
+          // is being read, but with existing value already available
+          isInitialLoadingState('third'),
+          isStateWith(isLoading: false, content: 'w', action: isEmpty),
+        ]),
+      );
 
-    test('are cancelled when keys change, even while write is ongoing', () {});
+      // Add resource action while loading, but then switch keys while reading
+      bloc.key = 'first';
+      bloc.freshContent = 'x';
+      bloc.truthReadLocked.value = true;
+      await pumpEventQueue();
+
+      final a1Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: a1Lock));
+      await pumpEventQueue();
+
+      final freshSink = bloc.applyStreamFreshSource();
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      bloc.truthReadLocked.value = false;
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'y');
+      await pumpEventQueue();
+
+      a1Lock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('first').value,
+          isValueWith(content: 'x', action: isEmpty));
+      expect(bloc.actionStartCount, equals(1));
+      // Emit throws since no value is available. Action finishes early.
+      expect(bloc.actionFinishCount, equals(0));
+
+      // Emit new value then add resource action, but switch keys while reading
+      bloc.truthReadLocked.value = true;
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'z');
+      await pumpEventQueue();
+
+      final a2Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(1, loading: 'load', done: 'done', lock: a2Lock));
+      await pumpEventQueue();
+
+      bloc.applyValueFreshSource();
+      bloc.freshContent = 'w';
+      bloc.key = 'third';
+      await pumpEventQueue();
+
+      bloc.truthReadLocked.value = false;
+      await pumpEventQueue();
+
+      a2Lock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('second').value,
+          isValueWith(content: 'z', action: isEmpty));
+      expect(bloc.actionStartCount, equals(2));
+      // Emit throws since no value is available. Action finishes early.
+      expect(bloc.actionFinishCount, equals(0));
+    });
+
+    test('are cancelled when keys change, even with ongoing write', () async {
+      // Same behavior as above truth read case
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, add resource action while loading,
+          // but then switch keys while writing
+          isInitialLoadingState('first'),
+          // Second load finishes normally
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+          // Third load with key switch while resource action is loading, value
+          // is being written, but with existing value already available
+          isInitialLoadingState('third'),
+          isStateWith(isLoading: false, content: 'w', action: isEmpty),
+        ]),
+      );
+
+      // Add resource action while loading, but then switch keys while writing
+      bloc.key = 'first';
+      bloc.freshContent = 'x';
+      bloc.truthWriteLocked.value = true;
+      await pumpEventQueue();
+
+      final a1Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: a1Lock));
+      await pumpEventQueue();
+
+      final freshSink = bloc.applyStreamFreshSource();
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      bloc.truthWriteLocked.value = false;
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'y');
+      await pumpEventQueue();
+
+      a1Lock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('first').value,
+          isValueWith(content: 'x', action: isEmpty));
+      expect(bloc.actionStartCount, equals(1));
+      // Emit throws since no value is available. Action finishes early.
+      expect(bloc.actionFinishCount, equals(0));
+
+      // Emit new value then add resource action, but switch keys while writing
+      bloc.truthWriteLocked.value = true;
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'z');
+      await pumpEventQueue();
+
+      final a2Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(1, loading: 'load', done: 'done', lock: a2Lock));
+      await pumpEventQueue();
+
+      bloc.applyValueFreshSource();
+      bloc.freshContent = 'w';
+      bloc.key = 'third';
+      await pumpEventQueue();
+
+      bloc.truthWriteLocked.value = false;
+      await pumpEventQueue();
+
+      a2Lock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('second').value,
+          isValueWith(content: 'z', action: isEmpty));
+      expect(bloc.actionStartCount, equals(2));
+      // Emit throws since no value is available. Action finishes early.
+      expect(bloc.actionFinishCount, equals(0));
+    });
   });
 }

@@ -110,7 +110,8 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     if (truthReadThrowable != null) {
       throw truthReadThrowable!;
     }
-    yield* (truthSources[key] ??= BehaviorSubject());
+    yield* getTruthSource(key)
+        .delayWhen((_) => truthReadLocked.where(_isUnlocked));
   }
 
   @override
@@ -122,7 +123,7 @@ class TestResourceBloc extends ResourceBloc<String, Value> {
     if (truthWriteThrowable != null) {
       throw truthWriteThrowable!;
     }
-    (truthSources[key] ??= BehaviorSubject()).value = value;
+    getTruthSource(key).value = value;
   }
 
   FutureOr<void> _onTestAction(
