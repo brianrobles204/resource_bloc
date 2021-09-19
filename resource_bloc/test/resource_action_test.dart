@@ -499,10 +499,49 @@ void main() {
 
       expect(bloc.getTruthSource('first').value, isLoadValue);
       expect(bloc.actionStartCount, equals(1));
-      // still finishes / attempts side effects, but nothing emitted / saved
+      // Still finishes / attempts side effects, but nothing emitted / saved
       expect(bloc.actionFinishCount, equals(1));
 
       bloc.close();
+    });
+
+    test('are cancelled when keys change, even with ongoing reload', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, add resource action while loading, but then switch keys
+          isInitialLoadingState('first'),
+          // Second load finishes normally
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+        ]),
+      );
+
+      final firstSink = bloc.applyStreamFreshSource();
+      bloc.key = 'first';
+      await pumpEventQueue();
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: actionLock));
+      await pumpEventQueue();
+
+      final secondSink = bloc.applyStreamFreshSource();
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      firstSink.add((_) => 'x');
+      await pumpEventQueue();
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      secondSink.add((_) => 'y');
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('first').hasValue, isFalse);
+      expect(bloc.actionStartCount, equals(1));
+      // Emit throws since no value is available. Action finishes early.
+      expect(bloc.actionFinishCount, equals(0));
     });
 
     test('are cancelled when keys change, even while read is ongoing', () {});
