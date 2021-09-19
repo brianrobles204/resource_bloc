@@ -455,6 +455,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     await _closeAllSubscriptions();
     await _freshSource.close();
     await _valueLock.close();
+    await _eventQueue.close();
     return super.close();
   }
 }
