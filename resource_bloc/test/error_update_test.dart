@@ -215,6 +215,69 @@ void main() {
       bloc.truthReadLocked.value = false;
     });
 
+    test('from fresh source during truth write reflect in state', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, with two emits from fresh source,
+          // one value, then one error during truth write
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'x', error: isNull),
+          isStateWith(isLoading: false, content: 'x', error: isStateError),
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.truthWriteLocked.value = true;
+      final freshSink = bloc.applyStreamFreshSource();
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'x');
+      await pumpEventQueue();
+
+      expect(bloc.state, isInitialLoadingState('key')); // waiting for read
+
+      freshSink.addError(StateError('error'));
+      await pumpEventQueue();
+
+      bloc.truthWriteLocked.value = false;
+    });
+
+    test('directly after value reflect error (but w/ value written)', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, with two emits from fresh source: one value, then one error.
+          // Error emitted syncronously, right after value (during truth write)
+          isInitialLoadingState('key'),
+          // While we normally expect value then error to emit, because the
+          // error emitted was right after the write, the truth subscription was
+          // closed before a new value could be emitted.
+          //
+          // Value should still be written to truth source.
+          isStateWhere(isLoading: false, value: isNull, error: isStateError),
+          emitsDone,
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.truthReadLocked.value = true;
+      final freshSink = bloc.applyStreamFreshSource();
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      freshSink.add((_) => 'x');
+      freshSink.addError(StateError('error'));
+      await pumpEventQueue();
+
+      bloc.truthReadLocked.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('key').value, isValueWith(content: 'x'));
+      bloc.close();
+    });
+
     test('cancel further fresh or truth updates', () async {
       expectLater(
         bloc.stream,

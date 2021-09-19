@@ -380,14 +380,91 @@ void main() {
       bloc.key = 'key';
       await untilDone(bloc);
 
+      final lock = BehaviorSubject.seeded(true);
+      final throwable = StateError('error');
+      bloc.add(TestAction(0,
+          loading: 'load', done: 'done', lock: lock, throwable: throwable));
+
+      // Give time for truth write to work successfully before throwing
+      await pumpEventQueue();
+      lock.value = false;
+    });
+
+    test('errors are routed to onCancel callback if provided', () async {
+      bloc = TestResourceBloc(
+        onCancelAction: (value) => value.copyWithAction(0, 'cancel'),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'fresh', action: isEmpty),
+          // Throw during resource action
+          isStateWith(isLoading: false, content: 'fresh', action: {0: 'load'}),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(content: 'fresh', action: {0: 'cancel'}),
+              error: isNull),
+        ]),
+      );
+
+      bloc.freshContent = 'fresh';
+      bloc.key = 'key';
+      await untilDone(bloc);
+
       bloc.add(TestAction(0,
           loading: 'load', done: 'done', throwable: StateError('error')));
     });
 
-    test('errors are routed to onCancel callback if provided', () {});
+    test('are cancelled when keys change, saving onCancel value', () async {
+      bloc = TestResourceBloc(
+        onCancelAction: (value) => value.copyWithAction(0, 'cancel'),
+      );
 
-    test('that emit during truth read will reflect after first value', () {});
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally and start action
+          isInitialLoadingState('first'),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          isStateWith(isLoading: false, content: 'x', action: {0: 'load'}),
+          // Change keys while action is ongoing
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+          emitsDone,
+        ]),
+      );
 
-    test('that emit during truth write will reflect after first value', () {});
+      bloc.freshContent = 'x';
+      bloc.key = 'first';
+      await untilDone(bloc);
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: actionLock));
+      await pumpEventQueue();
+
+      // Change keys while action is ongoing
+      bloc.freshContent = 'y';
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      final isCancelValue = isValueWith(content: 'x', action: {0: 'cancel'});
+      expect(bloc.getTruthSource('first').value, isCancelValue);
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('first').value, isCancelValue);
+
+      bloc.close();
+    });
+
+    test('are cancelled when keys change, even without onCancel', () {});
+
+    test('are cancelled when keys change, even while read is ongoing', () {});
+
+    test('are cancelled when keys change, even while write is ongoing', () {});
   });
 }

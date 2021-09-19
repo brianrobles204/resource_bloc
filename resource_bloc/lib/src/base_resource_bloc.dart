@@ -32,24 +32,19 @@ class _Lock<K extends Object, V> {
   final bool isLocked;
 }
 
-final EventTransformer<ResourceEvent> _restartable =
-    (events, mapper) => events.switchMap(mapper);
-final EventTransformer<ResourceEvent> _sequential =
-    (events, mapper) => events.asyncExpand(mapper);
-
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
   BaseResourceBloc({
     K? initialKey,
     this.initialValue,
   }) : super(_initialStateFor(initialKey, initialValue, isLoading: false)) {
-    on<KeyUpdate<K>>(_onKeyUpdate, transformer: _restartable);
-    on<KeyError>(_onKeyError, transformer: _restartable);
-    on<Reload>(_onReload, transformer: _sequential);
-    on<ValueUpdate<K, V>>(_onValueUpdate, transformer: _sequential);
-    on<ErrorUpdate>(_onErrorUpdate, transformer: _restartable);
-    on<ResourceAction>(_onResourceAction, transformer: _sequential);
-    on<TruthSourceUpdate>(_onTruthSourceUpdate, transformer: _sequential);
+    _onSequential<KeyUpdate<K>>(_onKeyUpdate);
+    _onSequential<KeyError>(_onKeyError);
+    _onSequential<Reload>(_onReload);
+    _onSequential<ValueUpdate<K, V>>(_onValueUpdate);
+    _onSequential<ErrorUpdate>(_onErrorUpdate);
+    _onSequential<ResourceAction>(_onResourceAction);
+    _onSequential<TruthSourceUpdate>(_onTruthSourceUpdate);
 
     if (initialKey != null) {
       _setUpTruthSubscription(initialKey);
@@ -139,6 +134,27 @@ abstract class BaseResourceBloc<K extends Object, V>
         source: Source.fresh,
       );
     }
+  }
+
+  final _eventQueue = BehaviorSubject<List<Object>>.seeded([]);
+
+  /// Implementation of [on] that processes all events sequentially, even
+  /// between different types of events. Similar to the original bloc behavior.
+  void _onSequential<E extends ResourceEvent>(
+    EventHandler<E, ResourceState<K, V>> handler,
+  ) {
+    final EventHandler<E, ResourceState<K, V>> _handler = (event, emit) async {
+      _eventQueue.value = [..._eventQueue.value, emit];
+      await _eventQueue.firstWhere((queue) => queue.first == emit);
+      try {
+        await handler(event, emit);
+      } finally {
+        assert(_eventQueue.value.first == emit);
+        _eventQueue.value = _eventQueue.value.sublist(1);
+      }
+    };
+
+    on<E>(_handler);
   }
 
   static ResourceState<K, V> _initialStateFor<K extends Object, V>(
@@ -345,7 +361,12 @@ abstract class BaseResourceBloc<K extends Object, V>
       return;
     }
 
-    await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
+    if (_valueLock.value.isLocked) {
+      await _valueLock.firstWhere((lock) => lock.hasValue);
+      if (key == _valueLock.value.key) {
+        emit(_truthValueToState(_valueLock.value.value!));
+      }
+    }
     _valueLock.value = _Lock.locked();
 
     // Write to truth source, but don't await the write
@@ -409,10 +430,11 @@ abstract class BaseResourceBloc<K extends Object, V>
   }
 
   Future<void> _closeAllSubscriptions() async {
-    await _closeFreshSubscriptions();
-
     await _truthSubscription?.cancel();
     _truthSubscription = null;
+
+    await _closeFreshSubscriptions();
+
     if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
   }
 
