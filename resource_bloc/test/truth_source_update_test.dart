@@ -162,7 +162,13 @@ void main() {
       bloc.getTruthSource('key').value =
           bloc.createFreshValue('key', content: 'seeded');
       bloc.freshValueThrowable = null;
+      bloc.freshValueLocked.value = true;
       bloc.reload();
+
+      // Delay to allow seeded value to take effect without race issues
+      // from synchronous fresh value
+      await pumpEventQueue();
+      bloc.freshValueLocked.value = false;
     });
 
     test('can emit while fresh source is loading, tagged as cache', () async {
