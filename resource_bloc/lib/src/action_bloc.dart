@@ -124,16 +124,22 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
               writeValue(onCancel(value));
             } catch (e, s) {
               print('WARN: Error while writing values to truth source during '
-                  'bloc close. Error: $e\n$s');
+                  'bloc close.\nError: $e\n$s');
               // Swallow error
             }
           }
           emit.isCancelled = true;
           _emitters.remove(emit);
         }
-      } catch (e, s) {
-        print('INFO: No value available for cancel callback. Error: $e\n$s');
+      } catch (e) {
+        print('INFO: Tried to cancel resource action, but no value was '
+            'available for onCancel(value) callback. Doing nothing.');
         // Swallow error
+      } finally {
+        for (final emit in _emitters) {
+          emit.isCancelled = true;
+        }
+        _emitters.clear();
       }
     }
     return super.close();
@@ -161,8 +167,8 @@ class _ActionEmitter<V> extends ActionEmitter<V> {
   @override
   Future<void> call(V Function(V value) callback) async {
     if (isCancelled) return;
-    if (isDone) {
-      print('''\n\n
+
+    assert(!isDone, '''\n\n
 emit was called after an action event handler completed normally.
 This is usually due to an unawaited future in an event handler.
 Please make sure to await all asynchronous operations with event handlers
@@ -179,13 +185,21 @@ ensure the event handler has not completed.
     await future.whenComplete(() => emit(...));
   });
 ''');
-      return;
-    }
 
-    final origValue = await value;
-    if (!isDone) {
-      final newValue = callback(origValue);
-      emit(_Value<V>(newValue));
+    try {
+      final origValue = await value;
+      if (!isDone) {
+        final newValue = callback(origValue);
+        emit(_Value<V>(newValue));
+      }
+    } catch (e) {
+      assert(() {
+        print('INFO: Error occurred while trying to read value for emit. '
+            'This most likely ocurred due to the action being cancelled while '
+            'waiting for a valid value. Rethrowing error to cancel action.');
+        return true;
+      }());
+      rethrow;
     }
   }
 }
