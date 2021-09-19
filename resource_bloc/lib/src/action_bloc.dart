@@ -132,8 +132,9 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
           _emitters.remove(emit);
         }
       } catch (e) {
-        print('INFO: Tried to cancel resource action, but no value was '
-            'available for onCancel(value) callback. Doing nothing.');
+        // Tried to cancel resource action, but no value was
+        // available for onCancel(value) callback. Doing nothing.
+        //
         // Swallow error
       } finally {
         for (final emit in _emitters) {
@@ -193,12 +194,9 @@ ensure the event handler has not completed.
         emit(_Value<V>(newValue));
       }
     } catch (e) {
-      assert(() {
-        print('INFO: Error occurred while trying to read value for emit. '
-            'This most likely ocurred due to the action being cancelled while '
-            'waiting for a valid value. Rethrowing error to cancel action.');
-        return true;
-      }());
+      // Error occurred while trying to read value for emit.
+      // This most likely ocurred due to the action being cancelled while
+      // waiting for a valid value. Rethrowing error to cancel action.
       rethrow;
     }
   }
