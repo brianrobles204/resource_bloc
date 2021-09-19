@@ -208,6 +208,14 @@ abstract class BaseResourceBloc<K extends Object, V>
     assert(_freshSubscription == null);
     assert(_actionBloc == null);
 
+    V requireValue() {
+      if (key != this.key) {
+        throw StateError('Tried to read value from a different key.');
+      }
+
+      return state.requireValue;
+    }
+
     _actionBloc = ActionBloc(
       handlerRefs: _actionHandlerRefs,
       getValue: ({required bool throwIfNone}) async {
@@ -217,12 +225,12 @@ abstract class BaseResourceBloc<K extends Object, V>
 
         await _untilValueUnlocked();
         if (throwIfNone) {
-          return state.requireValue;
+          return requireValue();
         } else {
           if (!_isReadyForAction()) {
             await stream.firstWhere((state) => _isReadyForAction());
           }
-          return state.requireValue;
+          return requireValue();
         }
       },
       writeValue: (value) => writeTruthSource(key, value),
