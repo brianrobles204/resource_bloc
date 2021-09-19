@@ -25,26 +25,23 @@ class ActionHandlerRef<A extends ResourceAction, V> {
   Type get actionType => A;
 
   void registerOn(ActionBloc<V> bloc, {required ValueGetter<V> getValue}) {
+    final onCancel = this.onCancel;
     final EventHandler<A, ActionState<V>> _handler = (event, emit) async {
-      final actionEmit = _ActionEmitter<V>(emit, getValue: getValue);
+      final actionEmit =
+          _ActionEmitter<V>(emit, getValue: getValue, onCancel: onCancel);
       final actionHandler = Future(() => handler(event, actionEmit));
-      final onCancel = this.onCancel;
 
-      if (onCancel != null) {
-        try {
-          bloc._cancelCallbacks[emit] = onCancel;
-          await actionHandler;
-        } catch (e) {
+      try {
+        bloc._emitters.add(actionEmit);
+        await actionHandler;
+      } catch (e) {
+        if (onCancel != null) {
           await actionEmit((value) => onCancel(value));
-        } finally {
-          bloc._cancelCallbacks.remove(emit);
-        }
-      } else {
-        try {
-          await actionHandler;
-        } catch (e) {
+        } else {
           emit(_Error(e));
         }
+      } finally {
+        bloc._emitters.remove(emit);
       }
     };
 
@@ -112,22 +109,27 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
       .where((state) => state is _Value<V> || state is _Error<V>)
       .map(_toValue);
 
-  final _cancelCallbacks = <Object, CancelCallback<V>>{};
+  final _emitters = <_ActionEmitter<V>>{};
 
   @override
   Future<void> close() async {
-    if (_cancelCallbacks.isNotEmpty) {
+    if (_emitters.isNotEmpty) {
       try {
         final value = await getValue(throwIfNone: true);
 
-        for (final callback in List.of(_cancelCallbacks.values)) {
-          try {
-            writeValue(callback(value));
-          } catch (e, s) {
-            print('WARN: Error while writing values to truth source during '
-                'bloc close. Error: $e\n$s');
-            // Swallow error
+        for (final emit in _emitters.toList()) {
+          final onCancel = emit.onCancel;
+          if (onCancel != null) {
+            try {
+              writeValue(onCancel(value));
+            } catch (e, s) {
+              print('WARN: Error while writing values to truth source during '
+                  'bloc close. Error: $e\n$s');
+              // Swallow error
+            }
           }
+          emit.isCancelled = true;
+          _emitters.remove(emit);
         }
       } catch (e, s) {
         print('INFO: No value available for cancel callback. Error: $e\n$s');
@@ -142,10 +144,13 @@ class _ActionEmitter<V> extends ActionEmitter<V> {
   _ActionEmitter(
     this.emit, {
     required this.getValue,
+    required this.onCancel,
   });
 
   final Emitter<ActionState<V>> emit;
   final ValueGetter<V> getValue;
+  final CancelCallback<V>? onCancel;
+  var isCancelled = false;
 
   @override
   Future<V> get value => getValue(throwIfNone: false);
@@ -155,6 +160,28 @@ class _ActionEmitter<V> extends ActionEmitter<V> {
 
   @override
   Future<void> call(V Function(V value) callback) async {
+    if (isCancelled) return;
+    if (isDone) {
+      print('''\n\n
+emit was called after an action event handler completed normally.
+This is usually due to an unawaited future in an event handler.
+Please make sure to await all asynchronous operations with event handlers
+and use emit.isDone after asynchronous operations before calling emit() to
+ensure the event handler has not completed.
+
+  **BAD**
+  onAction<ResourceAction>((action, emit) {
+    future.whenComplete(() => emit(...));
+  });
+
+  **GOOD**
+  onAction<ResourceAction>((action, emit) async {
+    await future.whenComplete(() => emit(...));
+  });
+''');
+      return;
+    }
+
     final origValue = await value;
     if (!isDone) {
       final newValue = callback(origValue);

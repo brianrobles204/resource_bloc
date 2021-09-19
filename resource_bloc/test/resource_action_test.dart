@@ -450,6 +450,7 @@ void main() {
       bloc.key = 'second';
       await pumpEventQueue();
 
+      // Truth source should reflect cancel value, even if bloc stream doesn't
       final isCancelValue = isValueWith(content: 'x', action: {0: 'cancel'});
       expect(bloc.getTruthSource('first').value, isCancelValue);
 
@@ -461,7 +462,48 @@ void main() {
       bloc.close();
     });
 
-    test('are cancelled when keys change, even without onCancel', () {});
+    test('are cancelled when keys change, even without onCancel', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally and start action
+          isInitialLoadingState('first'),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          isStateWith(isLoading: false, content: 'x', action: {0: 'load'}),
+          // Change keys while action is ongoing
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+          emitsDone,
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.key = 'first';
+      await untilDone(bloc);
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: actionLock));
+      await pumpEventQueue();
+
+      // Change keys while action is ongoing
+      bloc.freshContent = 'y';
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      // Truth source should reflect value before cancel, no further updates
+      final isLoadValue = isValueWith(content: 'x', action: {0: 'load'});
+      expect(bloc.getTruthSource('first').value, isLoadValue);
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('first').value, isLoadValue);
+      expect(bloc.actionStartCount, equals(1));
+      // still finishes / attempts side effects, but nothing emitted / saved
+      expect(bloc.actionFinishCount, equals(1));
+
+      bloc.close();
+    });
 
     test('are cancelled when keys change, even while read is ongoing', () {});
 

@@ -136,7 +136,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     }
   }
 
-  final _eventQueue = BehaviorSubject<List<Object>>.seeded([]);
+  final _eventQueue = BehaviorSubject<List<Object>>.seeded([], sync: true);
 
   /// Implementation of [on] that processes all events sequentially, even
   /// between different types of events. Similar to the original bloc behavior.
@@ -211,6 +211,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     _actionBloc = ActionBloc(
       handlerRefs: _actionHandlerRefs,
       getValue: ({required bool throwIfNone}) async {
+        if (key != this.key) {
+          throw StateError('Tried to read value from a different key.');
+        }
+
         await _untilValueUnlocked();
         if (throwIfNone) {
           return state.requireValue;
