@@ -394,13 +394,28 @@ abstract class BaseResourceBloc<K extends Object, V>
     ErrorUpdate event,
     Emitter<ResourceState<K, V>> emit,
   ) async {
+    final cancelValue = await _actionBloc?.cancel();
+    if (cancelValue != null) {
+      // Use key captured by action bloc write value
+      _actionBloc?.writeValue(cancelValue);
+    }
+
     await _closeAllSubscriptions();
 
-    emit(state.copyWithError(
+    var errorState = state.copyWithError(
       event.error,
       isLoading: false,
       includeValue: event.isValueValid,
-    ));
+    );
+
+    if (cancelValue != null) {
+      errorState = errorState.copyWithValue(
+        cancelValue,
+        source: errorState.source ?? Source.fresh,
+      );
+    }
+
+    emit(errorState);
   }
 
   FutureOr<void> _onResourceAction(

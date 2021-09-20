@@ -694,5 +694,84 @@ void main() {
       // Emit throws since no value is available. Action finishes early.
       expect(bloc.actionFinishCount, equals(0));
     });
+
+    test('are cancelled after an error update occurs', () async {
+      bloc = TestResourceBloc(
+        onCancelAction: (value) => value.copyWithAction(0, 'cancel'),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load, add resource while loading, then update with error
+          isInitialLoadingState('key'),
+          isStateWhere(isLoading: false, value: isNull, error: isStateError),
+          // Load, complete successfully, add action but then error
+          // while action is running
+          isStateWhere(isLoading: true, value: isNull, error: isStateError),
+          isStateWith(
+              isLoading: false, content: 'y', action: isEmpty, error: isNull),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(content: 'y', action: {0: 'load'}),
+              error: isNull),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(content: 'y', action: {0: 'cancel'}),
+              error: isStateError),
+          emitsDone,
+        ]),
+      );
+
+      // Load, add resource while loading, then update with error
+      final firstSink = bloc.applyStreamFreshSource();
+      bloc.key = 'key';
+      await pumpEventQueue();
+
+      final a1Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: a1Lock));
+      await pumpEventQueue();
+
+      firstSink.addError(StateError('error'));
+      await pumpEventQueue();
+
+      a1Lock.value = false;
+      await pumpEventQueue();
+
+      expect(() => bloc.getTruthSource('key').value,
+          throwsA(isA<ValueStreamError>()));
+
+      // Load, complete successfully, add action but then error
+      // while action is running
+      final secondSink = bloc.applyStreamFreshSource();
+      bloc.reload();
+      await pumpEventQueue();
+
+      secondSink.add((_) => 'y');
+      await pumpEventQueue();
+
+      final a2Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: a2Lock));
+      await pumpEventQueue();
+
+      secondSink.addError(StateError('error'));
+      await pumpEventQueue();
+
+      a2Lock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('key').value,
+          isValueWith(content: 'y', action: {0: 'cancel'}));
+
+      bloc.close();
+    });
+
+    test('are cancelled after a key error', () {
+      // with onCancel
+    });
+
+    test('are not cancelled on reload', () {
+      //
+    });
   });
 }

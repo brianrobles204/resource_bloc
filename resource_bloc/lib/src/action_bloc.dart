@@ -105,37 +105,51 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
     }
   }
 
+  /// Stream of raw values emitted by the action bloc.
+  ///
+  /// Any errors thrown during the processing of the action are also added
+  /// to the stream.
   Stream<V> get valueStream => stream
       .where((state) => state is _Value<V> || state is _Error<V>)
       .map(_toValue);
 
   final _emitters = <_ActionEmitter<V>>{};
 
-  @override
-  Future<void> close() async {
+  /// Cancels all ongoing actions within the action bloc, and returns the
+  /// cancelled value of the actions, if any.
+  ///
+  /// The cancelled value is determined by the optional `onCancel` callback that
+  /// was provided when creating the handler.
+  ///
+  /// If there are no ongoing actions, this method does nothing. If all ongoing
+  /// actions have no `onCancel` callback, this method cancels the ongoing
+  /// actions but returns null.
+  Future<V?> cancel() async {
     if (_emitters.isNotEmpty) {
       try {
         final value = await getValue(throwIfNone: true);
+        V? cancelValue;
 
         for (final emit in _emitters.toList()) {
           final onCancel = emit.onCancel;
           if (onCancel != null) {
             try {
-              writeValue(onCancel(value));
+              cancelValue = onCancel(cancelValue ?? value);
             } catch (e, s) {
-              print('WARN: Error while writing values to truth source during '
-                  'bloc close.\nError: $e\n$s');
+              print('WARN: Error while calling onCancel on value $value. '
+                  'Skipping.\nError: $e\n$s');
               // Swallow error
             }
           }
           emit.isCancelled = true;
           _emitters.remove(emit);
         }
+
+        return cancelValue;
       } catch (e) {
         // Tried to cancel resource action, but no value was
         // available for onCancel(value) callback. Doing nothing.
-        //
-        // Swallow error
+        return null;
       } finally {
         for (final emit in _emitters) {
           emit.isCancelled = true;
@@ -143,6 +157,21 @@ class ActionBloc<V> extends Bloc<ResourceAction, ActionState<V>> {
         _emitters.clear();
       }
     }
+  }
+
+  @override
+  Future<void> close() async {
+    final value = await cancel();
+    if (value != null) {
+      try {
+        writeValue(value);
+      } catch (e, s) {
+        print('WARN: Error while writing values to truth source during '
+            'bloc close.\nError: $e\n$s');
+        // Swallow error
+      }
+    }
+
     return super.close();
   }
 }
