@@ -186,6 +186,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   StreamSubscription<V>? _freshSubscription;
   ActionBloc<V>? _actionBloc;
   final _freshSource = BehaviorSubject<Stream<V>>();
+  final _actionSource = BehaviorSubject<Stream<V>>();
 
   void _setUpTruthSubscription(K newKey) {
     assert(_truthSubscription == null);
@@ -200,8 +201,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     );
   }
 
-  void _setUpFreshSubscription(K key) {
-    assert(_freshSubscription == null);
+  void _setUpActionBloc(K key) {
     assert(_actionBloc == null);
 
     void assertCorrectKey() {
@@ -235,6 +235,16 @@ abstract class BaseResourceBloc<K extends Object, V>
       writeValue: (value) => writeTruthSource(key, value),
     );
 
+    _actionSource.value = _actionBloc!.valueStream;
+  }
+
+  bool _isReadyForAction() =>
+      state.source == Source.fresh ||
+      (state.source == Source.cache && !state.isLoading);
+
+  void _setUpFreshSubscription(K key) {
+    assert(_freshSubscription == null);
+
     void tryUnlockAction() async {
       await _untilValueUnlocked();
       _isLoadingFresh = false;
@@ -243,7 +253,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     final freshActionStream = SwitchLatestStream(_freshSource)
         .asBroadcastStream()
         .doOnData((_) => tryUnlockAction())
-        .mergeWith([_actionBloc!.valueStream]);
+        .mergeWith([SwitchLatestStream(_actionSource)]);
 
     var hasEmittedValue = false;
     _freshSubscription = freshActionStream.listen(
@@ -261,10 +271,6 @@ abstract class BaseResourceBloc<K extends Object, V>
       cancelOnError: true,
     );
   }
-
-  bool _isReadyForAction() =>
-      state.source == Source.fresh ||
-      (state.source == Source.cache && !state.isLoading);
 
   FutureOr<void> _onKeyUpdate(
     KeyUpdate<K> event,
@@ -423,11 +429,10 @@ abstract class BaseResourceBloc<K extends Object, V>
     Emitter<ResourceState<K, V>> emit,
   ) async {
     if (_actionBloc == null) {
-      await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
       final key = this.key;
-      final value = this.value;
-      if (key != null && value != null) {
-        _setUpFreshSubscription(key);
+      if (key != null) {
+        if (_freshSubscription == null) _setUpFreshSubscription(key);
+        if (_actionBloc == null) _setUpActionBloc(key);
       } else {
         assert(() {
           print('WARN: Tried to perform a resource action $event, '
@@ -449,13 +454,18 @@ abstract class BaseResourceBloc<K extends Object, V>
     await emit.forEach<V>(_flushTruthValue(), onData: _truthValueToState);
   }
 
+  Future<void> _closeActionBloc() async {
+    await _actionBloc?.close();
+    if (!_actionSource.isClosed) _actionSource.value = Stream.empty();
+
+    _actionBloc = null;
+  }
+
   Future<void> _closeFreshSubscriptions() async {
     await _freshSubscription?.cancel();
-    await _actionBloc?.close();
     if (!_freshSource.isClosed) _freshSource.value = Stream.empty();
 
     _freshSubscription = null;
-    _actionBloc = null;
     _isLoadingFresh = false;
   }
 
@@ -464,6 +474,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     _truthSubscription = null;
 
     await _closeFreshSubscriptions();
+    await _closeActionBloc();
 
     if (!_valueLock.isClosed) _valueLock.value = _Lock.unlocked();
   }
@@ -472,6 +483,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   Future<void> close() async {
     await _closeAllSubscriptions();
     await _freshSource.close();
+    await _actionSource.close();
     await _valueLock.close();
     await _eventQueue.close();
     return super.close();

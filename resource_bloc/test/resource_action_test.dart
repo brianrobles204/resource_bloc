@@ -823,12 +823,78 @@ void main() {
       bloc.close();
     });
 
-    test('are cancelled after a key error', () {
-      // with onCancel
+    test('are cancelled after a key error', () async {
+      bloc = TestResourceBloc(
+        onCancelAction: (value) => value.copyWithAction(0, 'cancel'),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally first
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          // Start a resource action but emit key error while loading
+          isStateWith(isLoading: false, content: 'x', action: {0: 'load'}),
+          isKeyErrorState,
+          emitsDone,
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: actionLock));
+      await pumpEventQueue();
+
+      bloc.add(KeyError(StateError('error')));
+      await pumpEventQueue();
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      expect(bloc.getTruthSource('key').value,
+          isValueWith(content: 'x', action: {0: 'cancel'}));
+      bloc.close();
     });
 
-    test('are not cancelled on reload', () {
-      //
+    test('are not cancelled on subsequent reload', () async {
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally first
+          isInitialLoadingState('key'),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          // Start a resource action then reload while action is loading
+          isStateWith(isLoading: false, content: 'x', action: {0: 'load'}),
+          isStateWith(isLoading: true, content: 'x', action: {0: 'load'}),
+          // Fresh load test impl creates a new value, without carrying over
+          // existing value. Reflects likely real-use behavior
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+          isStateWith(isLoading: false, content: 'y', action: {0: 'done'}),
+          emitsDone,
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      final actionLock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(0, loading: 'load', done: 'done', lock: actionLock));
+      await pumpEventQueue();
+
+      // Reload while action is ongoing
+      bloc.freshContent = 'y';
+      bloc.reload();
+      await untilDone(bloc);
+
+      actionLock.value = false;
+      await pumpEventQueue();
+
+      bloc.close();
     });
   });
 }

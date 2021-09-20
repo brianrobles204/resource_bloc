@@ -195,9 +195,7 @@ void main() {
 
       expect(bloc.state, isInitialLoadingState('key'));
       bloc.truthReadLocked.value = false;
-      await untilDone(bloc);
-      await untilDone(bloc); // second await for second value
-      await untilDone(bloc); // third value
+      await pumpEventQueue();
 
       bloc.close();
     });
@@ -233,9 +231,7 @@ void main() {
 
       expect(bloc.state, isInitialLoadingState('key'));
       bloc.truthWriteLocked.value = false;
-      await untilDone(bloc);
-      await untilDone(bloc); // second await for second value
-      await untilDone(bloc); // third value
+      await pumpEventQueue();
 
       bloc.close();
     });
