@@ -197,7 +197,6 @@ abstract class BaseResourceBloc<K extends Object, V>
         add(const TruthSourceUpdate());
       },
       onError: (error) => add(ErrorUpdate(error, isValueValid: false)),
-      onDone: () => _valueLock.value = _Lock.unlocked(),
       cancelOnError: true,
     );
   }
@@ -268,7 +267,6 @@ abstract class BaseResourceBloc<K extends Object, V>
         await _untilValueUnlocked();
         add(ErrorUpdate(error, isValueValid: true));
       },
-      onDone: () => _isLoadingFresh = false,
       cancelOnError: true,
     );
   }
