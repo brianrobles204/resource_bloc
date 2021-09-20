@@ -64,7 +64,7 @@ abstract class BaseResourceBloc<K extends Object, V>
   Stream<V> readTruthSource(K key);
 
   @protected
-  Future<void> writeTruthSource(K key, V value);
+  FutureOr<void> writeTruthSource(K key, V value);
 
   final _actionHandlerRefs = <ActionHandlerRef<dynamic, V>>[];
   final _valueLock = BehaviorSubject<_Lock<K, V>>.seeded(_Lock.unlocked());
@@ -392,8 +392,13 @@ abstract class BaseResourceBloc<K extends Object, V>
 
     // Write to truth source, but don't await the write
     // This allows other events to be processed
-    writeTruthSource(event.key, event.value)
-        .catchError((error) => add(ErrorUpdate(error, isValueValid: false)));
+    () async {
+      try {
+        await writeTruthSource(event.key, event.value);
+      } catch (error) {
+        add(ErrorUpdate(error, isValueValid: false));
+      }
+    }();
   }
 
   FutureOr<void> _onErrorUpdate(

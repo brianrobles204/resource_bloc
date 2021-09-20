@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'base_resource_bloc.dart';
 import 'resource_event.dart';
 import 'truth_source.dart';
@@ -52,7 +54,7 @@ mixin CallbackResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
   Stream<V> readTruthSource(K key) => truthSource.read(key);
 
   @override
-  Future<void> writeTruthSource(K key, V value) =>
+  FutureOr<void> writeTruthSource(K key, V value) =>
       truthSource.write(key, value);
 }
 
