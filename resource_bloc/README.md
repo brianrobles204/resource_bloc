@@ -8,4 +8,4 @@ TO FOLLOW
 
 ## Features and bugs
 
-TO FOLLLOW
+TO FOLLOW
