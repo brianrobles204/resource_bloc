@@ -462,6 +462,63 @@ void main() {
       bloc.close();
     });
 
+    test('that are concurrent are both cancelled on key change', () async {
+      var cancelCount = 0;
+      bloc = TestResourceBloc(
+        onCancelAction: (value) => value.copyWithAction(
+          cancelCount++,
+          'cancel',
+        ),
+      );
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          // Load normally first
+          isInitialLoadingState('first'),
+          isStateWith(isLoading: false, content: 'x', action: isEmpty),
+          // Run two actions concurrently
+          isStateWith(isLoading: false, content: 'x', action: {-1: 'load'}),
+          isStateWith(
+              isLoading: false, content: 'x', action: {-1: 'load', -2: 'load'}),
+          // Key change, but cancelled actions should be saved in truth source
+          isInitialLoadingState('second'),
+          isStateWith(isLoading: false, content: 'y', action: isEmpty),
+        ]),
+      );
+
+      bloc.freshContent = 'x';
+      bloc.key = 'first';
+      await pumpEventQueue();
+
+      final a1Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(-1, loading: 'load', done: 'done', lock: a1Lock));
+      await pumpEventQueue();
+
+      final a2Lock = BehaviorSubject.seeded(true);
+      bloc.add(TestAction(-2, loading: 'load', done: 'done', lock: a2Lock));
+      await pumpEventQueue();
+
+      // Key change, truth source for first should reflect cancelled actions
+      bloc.freshContent = 'y';
+      bloc.key = 'second';
+      await pumpEventQueue();
+
+      a1Lock.value = false;
+      await pumpEventQueue();
+
+      a2Lock.value = false;
+      await pumpEventQueue();
+
+      expect(
+        bloc.getTruthSource('first').value,
+        isValueWith(
+          content: 'x',
+          action: {-1: 'load', -2: 'load', 0: 'cancel', 1: 'cancel'},
+        ),
+      );
+    });
+
     test('are cancelled when keys change, even without onCancel', () async {
       expectLater(
         bloc.stream,
