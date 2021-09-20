@@ -140,12 +140,13 @@ abstract class BaseResourceBloc<K extends Object, V>
     EventHandler<E, ResourceState<K, V>> handler,
   ) {
     final EventHandler<E, ResourceState<K, V>> _handler = (event, emit) async {
-      _eventQueue.value = [..._eventQueue.value, emit];
-      await _eventQueue.firstWhere((queue) => queue.first == emit);
+      final queueKey = Object();
+      _eventQueue.value = [..._eventQueue.value, queueKey];
+      await _eventQueue.firstWhere((queue) => queue.first == queueKey);
       try {
         await handler(event, emit);
       } finally {
-        assert(_eventQueue.value.first == emit);
+        assert(_eventQueue.value.first == queueKey);
         _eventQueue.value = _eventQueue.value.sublist(1);
       }
     };
