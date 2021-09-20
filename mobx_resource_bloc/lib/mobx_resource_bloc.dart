@@ -1,8 +1,5 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
+/// Provides tools for creating Resource Blocs whose properties work within
+/// MobX's reactivity system
 library mobx_resource_bloc;
 
-export 'src/mobx_resource_bloc_base.dart';
-
-// TODO: Export any libraries intended for clients of this package.
+export 'src/observable_bloc_mixin.dart';
