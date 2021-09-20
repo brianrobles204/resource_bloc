@@ -22,12 +22,13 @@ class ResourceState<K extends Object, V> extends Equatable {
   })  : value = null,
         source = null;
 
-  ResourceState.loadingWithValueAndError(
+  ResourceState.withValueAndError(
     K this.key,
     V this.value,
     Object this.error, {
     required Source this.source,
-  }) : isLoading = true;
+    required this.isLoading,
+  });
 
   ResourceState._raw(
     this.key,
@@ -115,6 +116,14 @@ enum Source { fresh, cache }
 
 extension ResourceStateRequireExtensions<K extends Object, V>
     on ResourceState<K, V> {
+  K get requireKey {
+    if (hasKey) {
+      return key!;
+    } else {
+      throw StateError('$this has no key');
+    }
+  }
+
   V get requireValue {
     if (hasValue) {
       return value as V;
