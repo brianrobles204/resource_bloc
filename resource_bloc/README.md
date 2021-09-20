@@ -1,7 +1,6 @@
 # Resource Bloc
 
-A specialized Bloc that simplifies offline-first data loading.
-Designed to manage resources backed by both remote and local sources.
+A specialized Bloc for managing data backed by both local and remote sources.
 
 ## Usage
 
