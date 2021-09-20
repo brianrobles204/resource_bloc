@@ -93,6 +93,11 @@ void main() {
       await pumpEventQueue();
     });
 
+    test('registering same action type twice will throw', () {
+      expect(() => bloc.onAction<TestAction>((_, __) => null),
+          throwsA(isA<AssertionError>()));
+    });
+
     test('will use initial value if not loading', () async {
       bloc = TestResourceBloc(
         initialKey: 'key',
