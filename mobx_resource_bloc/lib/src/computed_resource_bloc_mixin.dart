@@ -72,4 +72,10 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
     () => _streamValue.value,
     name: 'ComputedResourceBloc<$K,$V>.value',
   );
+
+  @override
+  Future<void> close() async {
+    await stream.close();
+    return super.close();
+  }
 }

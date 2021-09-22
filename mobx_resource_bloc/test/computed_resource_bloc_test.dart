@@ -122,7 +122,7 @@ void main() {
               isLoading: false, source: Source.fresh),
         ]),
       );
-    }, skip: 'Need to ensure clean-up of observable stream in order to close');
+    });
 
     test('updates bloc key while stream is being listened', () async {
       expect(keyCount, equals(1));
