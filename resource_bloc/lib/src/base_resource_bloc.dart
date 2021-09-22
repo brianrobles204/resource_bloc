@@ -35,9 +35,9 @@ class _Lock<K extends Object, V> {
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
   BaseResourceBloc({
-    K? initialKey,
+    this.initialKey,
     this.initialValue,
-  }) : super(_initialStateFor(initialKey, initialValue, isLoading: false)) {
+  }) : super(initialStateFor(initialKey, initialValue, isLoading: false)) {
     _onSequential<KeyUpdate<K>>(_onKeyUpdate);
     _onSequential<KeyError>(_onKeyError);
     _onSequential<Reload>(_onReload);
@@ -47,10 +47,11 @@ abstract class BaseResourceBloc<K extends Object, V>
     _onSequential<TruthSourceUpdate>(_onTruthSourceUpdate);
 
     if (initialKey != null) {
-      _setUpTruthSubscription(initialKey);
+      _setUpTruthSubscription(initialKey!);
     }
   }
 
+  final K? initialKey;
   final InitialValue<K, V>? initialValue;
 
   K? get key => state.key;
@@ -88,6 +89,42 @@ abstract class BaseResourceBloc<K extends Object, V>
     );
 
     _actionHandlerRefs.add(handlerRef);
+  }
+
+  ResourceState<K, V> initialState({required bool isLoading}) =>
+      initialStateFor(
+        initialKey,
+        initialValue,
+        isLoading: isLoading,
+      );
+
+  static ResourceState<K, V> initialStateFor<K extends Object, V>(
+    K? key,
+    InitialValue<K, V>? initialValue, {
+    required bool isLoading,
+  }) {
+    if (key != null) {
+      final value = () {
+        try {
+          return initialValue?.call(key);
+        } catch (e, s) {
+          assert(() {
+            print('WARN: Initial value callback threw on key \'$key\'. '
+                'Ignoring initial value. Error: $e');
+            print(s);
+            return true;
+          }());
+          return null;
+        }
+      }();
+
+      if (value != null) {
+        return ResourceState.withValue(key, value,
+            isLoading: isLoading, source: Source.cache);
+      }
+    }
+
+    return ResourceState.initial(key, isLoading: isLoading);
   }
 
   /// Future that completes when the value is unlocked.
@@ -152,35 +189,6 @@ abstract class BaseResourceBloc<K extends Object, V>
     };
 
     on<E>(_handler);
-  }
-
-  static ResourceState<K, V> _initialStateFor<K extends Object, V>(
-    K? key,
-    InitialValue<K, V>? initialValue, {
-    required bool isLoading,
-  }) {
-    if (key != null) {
-      final value = () {
-        try {
-          return initialValue?.call(key);
-        } catch (e, s) {
-          assert(() {
-            print('WARN: Initial value callback threw on key \'$key\'. '
-                'Ignoring initial value. Error: $e');
-            print(s);
-            return true;
-          }());
-          return null;
-        }
-      }();
-
-      if (value != null) {
-        return ResourceState.withValue(key, value,
-            isLoading: isLoading, source: Source.cache);
-      }
-    }
-
-    return ResourceState.initial(key, isLoading: isLoading);
   }
 
   StreamSubscription<V>? _truthSubscription;
@@ -278,7 +286,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     if (key != event.key) {
       await _closeAllSubscriptions();
 
-      emit(_initialStateFor(event.key, initialValue, isLoading: true));
+      emit(initialStateFor(event.key, initialValue, isLoading: true));
 
       _isLoadingFresh = true;
       _setUpTruthSubscription(event.key);
