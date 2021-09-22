@@ -9,8 +9,15 @@ environment:
 dependencies:
   bloc: ^7.2.0-dev.3
   mobx: ^2.0.4
-  resource_bloc: ^0.1.0-dev.1
+  resource_bloc: ^0.1.0-dev.2
 
 dev_dependencies:
   lints: ^1.0.1
   test: ^1.16.0
+
+dependency_overrides:
+  mobx:
+    git: 
+      url: git@github.com:brianrobles204/mobx.dart.git
+      ref: observable_stream_listen_updates
+      path: mobx
