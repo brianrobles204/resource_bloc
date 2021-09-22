@@ -18,7 +18,7 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
 
       if (super.state == initialState) {
         add(Reload());
-      } else {
+      } else if (key != super.state.key) {
         add(KeyUpdate(key));
       }
     } on MobXCaughtException catch (error) {
