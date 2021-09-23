@@ -10,13 +10,9 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
   void keyUpdateAutorun() {
     try {
       final key = computedKey.value;
-      final initialState = BaseResourceBloc.initialStateFor<K, V>(
-        key,
-        initialValue,
-        isLoading: false,
-      );
+      final currentState = super.state;
 
-      if (super.state == initialState) {
+      if (!currentState.isLoading && currentState.key == key) {
         add(Reload());
       } else if (key != super.state.key) {
         add(KeyUpdate(key));
@@ -44,8 +40,9 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
     return stream.value ??
         () {
           if (_isKeyUpdateRunning &&
-              super.state == initialState(isLoading: false)) {
-            return initialState(isLoading: true);
+              !super.state.isLoading &&
+              super.state.hasKey) {
+            return super.state.copyWith(isLoading: true);
           } else {
             return super.state;
           }

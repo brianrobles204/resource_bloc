@@ -220,6 +220,7 @@ void main() {
       );
 
       expect(bloc.key, equals(null));
+      expect(bloc.state.isLoading, isFalse);
       expect(bloc.state.hasKey, isFalse);
       expect(bloc.state.error, equals('error'));
 
@@ -245,7 +246,92 @@ void main() {
       );
     });
 
-    // TODO test initial value
+    test('initial value correctly reflects in initial state', () {
+      final initialValue = (String key) => 'init-$key';
+      bloc = ComputedResourceBloc.from(
+        key: keyCallback,
+        freshSource: freshSource,
+        truthSource: truthSource,
+        initialValue: initialValue,
+      );
+
+      expect(
+          bloc.state,
+          equals(ResourceState.withValue('key', 'init-key',
+              isLoading: false, source: Source.cache)));
+    });
+
+    test('initial value correctly reflects in stream', () async {
+      final initialValue = (String key) => 'init-$key';
+      bloc = ComputedResourceBloc.from(
+        key: keyCallback,
+        freshSource: freshSource,
+        truthSource: truthSource,
+        initialValue: initialValue,
+      );
+
+      final states = <ResourceState<String, String>>[];
+      final subscription = bloc.stream.listen(states.add);
+
+      await pumpEventQueue();
+
+      updateObs(key, 'second');
+      await pumpEventQueue();
+
+      await subscription.cancel();
+
+      expect(
+        states,
+        equals([
+          ResourceState.withValue('key', 'init-key',
+              isLoading: true, source: Source.cache),
+          ResourceState.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+          ResourceState.withValue('second', 'init-second',
+              isLoading: true, source: Source.cache),
+          ResourceState.withValue('second', 'second',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    test('truth source updates reflects in state', () async {
+      getTruthSource('key').add('truth');
+      await pumpEventQueue();
+
+      expect(
+          bloc.state,
+          equals(ResourceState<String, String>.withValue('key', 'truth',
+              isLoading: false, source: Source.cache)));
+    });
+
+    test('truth source updates reflect in stream', () async {
+      getTruthSource('key').add('truth');
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+      final dispose = autorun((_) => states.add(bloc.state));
+
+      await pumpEventQueue();
+
+      updateObs(key, 'second');
+      await pumpEventQueue();
+
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.withValue('key', 'truth',
+              isLoading: true, source: Source.cache),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+          ResourceState<String, String>.initial('second', isLoading: true),
+          ResourceState<String, String>.withValue('second', 'second',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
 
     // TODO test listening after load has started (thru manual reload, etc.)
   });
