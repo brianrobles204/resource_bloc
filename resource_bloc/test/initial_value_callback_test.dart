@@ -1,3 +1,4 @@
+import 'package:resource_bloc/resource_bloc.dart';
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -49,18 +50,31 @@ void main() {
       // State should already be initial value state
       expect(
         bloc.state,
-        isStateWith(isLoading: false, name: 'first', content: 'first-loading'),
+        isStateWhere(
+            isLoading: false,
+            value: isValueWith(name: 'first', content: 'first-loading'),
+            source: Source.cache),
       );
 
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          isStateWith(isLoading: true, name: 'first', content: 'first-loading'),
-          isStateWith(isLoading: false, name: 'first', content: 'first-ready'),
-          isStateWith(
-              isLoading: true, name: 'second', content: 'second-loading'),
-          isStateWith(
-              isLoading: false, name: 'second', content: 'second-ready'),
+          isStateWhere(
+              isLoading: true,
+              value: isValueWith(name: 'first', content: 'first-loading'),
+              source: Source.cache),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(name: 'first', content: 'first-ready'),
+              source: Source.fresh),
+          isStateWhere(
+              isLoading: true,
+              value: isValueWith(name: 'second', content: 'second-loading'),
+              source: Source.cache),
+          isStateWhere(
+              isLoading: false,
+              value: isValueWith(name: 'second', content: 'second-ready'),
+              source: Source.fresh),
         ]),
       );
 

@@ -163,7 +163,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   ResourceState<K, V> _truthValueToState(V value) {
     assert(key != null);
-    if (_isLoadingFresh) {
+    if (_isLoadingFresh || _freshSubscription == null) {
       return state.copyWithValue(
         value,
         source: Source.cache,
