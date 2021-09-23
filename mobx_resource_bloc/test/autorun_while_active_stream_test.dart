@@ -57,7 +57,36 @@ void main() {
       expect(runCount, equals(2));
     });
 
-    test('stops tracking if paused', () async {
+    test('broadcast source tracks if there is at least one sub', () async {
+      controller = StreamController<int>.broadcast();
+      final stream = autorunStream();
+
+      final sub1 = stream.listen(null);
+
+      expect(runCount, equals(1));
+      updateObservable('second');
+      expect(runCount, equals(2));
+
+      final sub2 = stream.listen(null);
+
+      expect(runCount, equals(2));
+      updateObservable('third');
+      expect(runCount, equals(3));
+
+      await sub1.cancel();
+
+      expect(runCount, equals(3));
+      updateObservable('fourth');
+      expect(runCount, equals(4));
+
+      await sub2.cancel();
+
+      expect(runCount, equals(4));
+      updateObservable('fifth');
+      expect(runCount, equals(4));
+    });
+
+    test('non-broadcast source stops tracking if paused', () async {
       final subscription = autorunStream().listen(null);
 
       expect(runCount, equals(1));
@@ -137,53 +166,6 @@ void main() {
 
       expect(runCount, equals(5));
       updateObservable('seventh');
-      expect(runCount, equals(6));
-
-      await subscription.cancel();
-    });
-
-    test('works with broadcast controllers', () async {
-      controller = StreamController.broadcast();
-      final subscription = autorunStream().listen(null);
-
-      expect(runCount, equals(1));
-      updateObservable('second');
-      expect(runCount, equals(2));
-
-      controller.add(10);
-
-      expect(runCount, equals(2));
-      updateObservable('third');
-      expect(runCount, equals(3));
-
-      subscription.pause();
-
-      expect(runCount, equals(3));
-      updateObservable('fourth');
-      expect(runCount, equals(3));
-
-      controller.add(20);
-
-      expect(runCount, equals(3));
-      updateObservable('fifth');
-      expect(runCount, equals(3));
-
-      subscription.resume();
-
-      expect(runCount, equals(4));
-      updateObservable('sixth');
-      expect(runCount, equals(5));
-
-      controller.add(30);
-
-      expect(runCount, equals(5));
-      updateObservable('seventh');
-      expect(runCount, equals(6));
-
-      await controller.close();
-
-      expect(runCount, equals(6));
-      updateObservable('eighth');
       expect(runCount, equals(6));
 
       await subscription.cancel();

@@ -40,33 +40,47 @@ class AutorunWhileActiveStream<T> extends StreamView<T> {
       }
     }
 
-    controller = StreamController<T>(
-      sync: true,
-      onListen: () {
-        subscription = stream.listen(
-          controller.add,
-          onError: controller.addError,
-          onDone: controller.close,
-        );
+    void onListen() {
+      subscription = stream.listen(
+        controller.add,
+        onError: controller.addError,
+        onDone: controller.close,
+      );
 
-        updateAutorun();
-      },
-      onPause: () {
-        subscription!.pause();
-        updateAutorun();
-      },
-      onResume: () {
-        subscription!.resume();
-        updateAutorun();
-      },
-      onCancel: () async {
-        disposeAutorun?.call();
-        disposeAutorun = null;
-        if (subscription != null) {
-          await subscription!.cancel();
-        }
-      },
-    );
+      updateAutorun();
+    }
+
+    void onPause() {
+      subscription!.pause();
+      updateAutorun();
+    }
+
+    void onResume() {
+      subscription!.resume();
+      updateAutorun();
+    }
+
+    Future<void> onCancel() async {
+      disposeAutorun?.call();
+      disposeAutorun = null;
+      if (subscription != null) {
+        await subscription!.cancel();
+      }
+    }
+
+    controller = stream.isBroadcast
+        ? StreamController<T>.broadcast(
+            sync: true,
+            onListen: onListen,
+            onCancel: onCancel,
+          )
+        : StreamController(
+            sync: true,
+            onListen: onListen,
+            onPause: onPause,
+            onResume: onResume,
+            onCancel: onCancel,
+          );
 
     return controller.stream;
   }
