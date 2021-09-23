@@ -35,9 +35,18 @@ class _Lock<K extends Object, V> {
 abstract class BaseResourceBloc<K extends Object, V>
     extends Bloc<ResourceEvent, ResourceState<K, V>> {
   BaseResourceBloc({
-    this.initialKey,
+    K? initialKey,
+    InitialValue<K, V>? initialValue,
+  }) : this.fromState(
+          initialStateFor(initialKey, initialValue, isLoading: false),
+          initialValue: initialValue,
+        );
+
+  BaseResourceBloc.fromState(
+    ResourceState<K, V> initialState, {
     this.initialValue,
-  }) : super(initialStateFor(initialKey, initialValue, isLoading: false)) {
+  })  : initialKey = initialState.key,
+        super(initialState) {
     _onSequential<KeyUpdate<K>>(_onKeyUpdate);
     _onSequential<KeyError>(_onKeyError);
     _onSequential<Reload>(_onReload);

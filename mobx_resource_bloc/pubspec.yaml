@@ -16,6 +16,8 @@ dev_dependencies:
   test: ^1.16.0
 
 dependency_overrides:
+  resource_bloc:
+    path: ../resource_bloc
   mobx:
     git: 
       url: git@github.com:brianrobles204/mobx.dart.git

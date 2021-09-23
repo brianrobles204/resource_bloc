@@ -10,37 +10,51 @@ void main() {
     var keyCount = 0;
     var freshCount = 0;
     late Observable<String> key;
+    var keyThrowable = Observable<Object?>(null);
     late ComputedResourceBloc<String, String> bloc;
+    late FreshSource<String, String> freshSourceCallback;
     final Map<String, StreamController<String>> truthDB = {};
-    late FreshSource<String, String> freshSource;
+    late TruthSource<String, String> truthSource;
 
     StreamController<String> getTruthSource(String key) {
       return (truthDB[key] ??= StreamController.broadcast());
     }
 
-    void updateKey(String newKey) {
-      runInAction(() => key.value = newKey);
+    void updateObs<T>(Observable<T> obs, T newValue) {
+      runInAction(() => obs.value = newValue);
+    }
+
+    Future<void> untilDone() =>
+        bloc.stream.firstWhere((state) => !state.isLoading);
+
+    String keyCallback() {
+      keyCount++;
+      if (keyThrowable.value != null) {
+        throw keyThrowable.value!;
+      }
+      return key.value;
+    }
+
+    Stream<String> freshSource(String key) {
+      freshCount++;
+      return freshSourceCallback(key);
     }
 
     setUp(() {
       keyCount = 0;
       freshCount = 0;
       key = Observable('key');
-      freshSource = (key) => Stream.value(key);
+      keyThrowable = Observable(null);
+      freshSourceCallback = (key) => Stream.value(key);
       truthDB.clear();
+      truthSource = TruthSource.from(
+        reader: (key) => getTruthSource(key).stream,
+        writer: (key, value) => getTruthSource(key).add(value),
+      );
       bloc = ComputedResourceBloc.from(
-        key: () {
-          keyCount++;
-          return key.value;
-        },
-        freshSource: (key) {
-          freshCount++;
-          return freshSource(key);
-        },
-        truthSource: TruthSource.from(
-          reader: (key) => getTruthSource(key).stream,
-          writer: (key, value) => getTruthSource(key).add(value),
-        ),
+        key: keyCallback,
+        freshSource: freshSource,
+        truthSource: truthSource,
       );
     });
 
@@ -101,13 +115,13 @@ void main() {
       expect(keyCount, equals(2));
       await pumpEventQueue();
 
-      updateKey('second');
+      updateObs(key, 'second');
       expect(keyCount, equals(3));
       await pumpEventQueue();
 
       dispose();
 
-      updateKey('third');
+      updateObs(key, 'third');
       await pumpEventQueue();
       expect(keyCount, equals(3));
 
@@ -140,7 +154,7 @@ void main() {
             isLoading: false, source: Source.fresh),
       );
 
-      updateKey('second');
+      updateObs(key, 'second');
       expect(keyCount, equals(3));
       await pumpEventQueue();
       expect(
@@ -151,7 +165,7 @@ void main() {
 
       await subscription.cancel();
 
-      updateKey('third');
+      updateObs(key, 'third');
       await pumpEventQueue();
       expect(keyCount, equals(3));
       expect(
@@ -161,5 +175,78 @@ void main() {
         reason: 'no change since stream is no longer being listened',
       );
     });
+
+    test('errors in key callback add a KeyError event', () async {
+      final states = <ResourceState<String, String>>[];
+      final subscription = bloc.stream.listen(states.add);
+
+      await untilDone();
+
+      updateObs(keyThrowable, 'error');
+      await untilDone();
+
+      updateObs(keyThrowable, null);
+      await untilDone();
+
+      await subscription.cancel();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.initial('key', isLoading: true),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+          ResourceState<String, String>.withError('error',
+              key: null, isLoading: false),
+          ResourceState<String, String>.initial('key', isLoading: true),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    test('keyCallback errors on init result in no key', () async {
+      final shouldThrow = Observable(true);
+      bloc = ComputedResourceBloc.from(
+        key: () {
+          if (shouldThrow.value) {
+            throw 'error';
+          } else {
+            return key.value;
+          }
+        },
+        freshSource: freshSource,
+        truthSource: truthSource,
+      );
+
+      expect(bloc.key, equals(null));
+      expect(bloc.state.hasKey, isFalse);
+      expect(bloc.state.error, equals('error'));
+
+      final states = <ResourceState<String, String>>[];
+      final dispose = autorun((_) => states.add(bloc.state));
+
+      await pumpEventQueue();
+
+      updateObs(shouldThrow, false);
+      await untilDone();
+
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.withError('error',
+              key: null, isLoading: false),
+          ResourceState<String, String>.initial('key', isLoading: true),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    // TODO test initial value
+
+    // TODO test listening after load has started (thru manual reload, etc.)
   });
 }

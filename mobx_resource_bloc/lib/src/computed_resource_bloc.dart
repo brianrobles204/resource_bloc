@@ -7,21 +7,37 @@ abstract class ComputedBaseResourceBloc<K extends Object, V>
   ComputedBaseResourceBloc({
     required KeyCallback<K> key,
     InitialValue<K, V>? initialValue,
-  }) : this.computed(
+  }) : this._computed(
           computedKey: Computed(key, name: 'ComputedResourceBloc<$K,$V>.key'),
           initialValue: initialValue,
         );
 
-  ComputedBaseResourceBloc.computed({
+  ComputedBaseResourceBloc._computed({
     required this.computedKey,
     InitialValue<K, V>? initialValue,
-  }) : super(
-          initialKey: computedKey.value,
+  }) : super.fromState(
+          _initialStateFor(computedKey, initialValue),
           initialValue: initialValue,
         );
 
   @override
   final Computed<K> computedKey;
+
+  static ResourceState<K, V> _initialStateFor<K extends Object, V>(
+    Computed<K> computedKey,
+    InitialValue<K, V>? initialValue,
+  ) {
+    try {
+      final key = computedKey.value;
+      return BaseResourceBloc.initialStateFor(
+        key,
+        initialValue,
+        isLoading: false,
+      );
+    } on MobXCaughtException catch (e) {
+      return ResourceState.withError(e.exception, key: null, isLoading: false);
+    }
+  }
 }
 
 abstract class ComputedResourceBloc<K extends Object, V>
