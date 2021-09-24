@@ -31,8 +31,8 @@ void main() {
       expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          isStateWith(isLoading: false, content: 'first', source: Source.fresh),
-          isStateWith(isLoading: true, content: 'first', source: Source.fresh),
+          isStateWith(isLoading: false, content: 'first', source: Source.cache),
+          isStateWith(isLoading: true, content: 'first', source: Source.cache),
           isStateWith(
               isLoading: false, content: 'second', source: Source.fresh),
         ]),
@@ -85,8 +85,8 @@ void main() {
         emitsInOrder(<dynamic>[
           // No initial loading state emitted, first state is the seeded value
           isStateWith(
-              isLoading: false, content: 'seeded', source: Source.fresh),
-          isStateWith(isLoading: true, content: 'seeded', source: Source.fresh),
+              isLoading: false, content: 'seeded', source: Source.cache),
+          isStateWith(isLoading: true, content: 'seeded', source: Source.cache),
           isStateWith(isLoading: false, content: 'fresh', source: Source.fresh),
         ]),
       );
