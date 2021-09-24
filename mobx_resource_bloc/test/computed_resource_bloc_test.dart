@@ -144,7 +144,7 @@ void main() {
       expect(keyCount, equals(2));
       expect(
         bloc.state,
-        ResourceState<String, String>.initial('key', isLoading: true),
+        ResourceState<String, String>.initial('key', isLoading: false),
       );
 
       await pumpEventQueue();
@@ -333,6 +333,39 @@ void main() {
       );
     });
 
-    // TODO test listening after load has started (thru manual reload, etc.)
+    test('state after an unobserved reload is correct', () async {
+      bloc.reload();
+      await pumpEventQueue();
+
+      expect(
+          bloc.state,
+          equals(ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh)));
+    });
+
+    test('can be observed after an unobserved reload', () async {
+      bloc.reload();
+      await pumpEventQueue();
+
+      freshSourceCallback = (key) => Stream.value('$key-2');
+
+      final states = <ResourceState<String, String>>[];
+      final subscription = bloc.stream.listen(states.add);
+
+      await pumpEventQueue();
+
+      await subscription.cancel();
+
+      expect(freshCount, equals(2));
+      expect(
+        states,
+        equals([
+          ResourceState.withValue('key', 'key',
+              isLoading: true, source: Source.fresh),
+          ResourceState.withValue('key', 'key-2',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
   });
 }

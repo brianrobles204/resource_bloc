@@ -36,37 +36,43 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
       .asObservable(name: 'ComputedResourceBloc<$K,$V>.stream');
   ObservableStream<ResourceState<K, V>>? _stream;
 
-  ResourceState<K, V> get _streamValue {
-    return stream.value ??
-        () {
-          if (_isKeyUpdateRunning &&
-              !super.state.isLoading &&
-              super.state.hasKey) {
-            return super.state.copyWith(isLoading: true);
-          } else {
-            return super.state;
-          }
-        }();
-  }
+  ResourceState<K, V> get _fallbackState => super.state;
+
+  bool get _shouldFallbackLoad =>
+      _isKeyUpdateRunning && !super.state.isLoading && super.state.hasKey;
 
   @override
-  ResourceState<K, V> get state => _state.value;
+  ResourceState<K, V> get state {
+    final currentState = _state.value;
+    if (!mainContext.isComputingDerivation() && _shouldFallbackLoad) {
+      // Only show fallback loading if inside MobX derivation
+      // Ordinary calls to state should show the original state
+      return currentState.copyWith(isLoading: false);
+    } else {
+      return currentState;
+    }
+  }
+
   late final _state = Computed(
-    () => _streamValue,
+    () =>
+        stream.value ??
+        // If stream has no value, listening or observing stream should start a
+        // load. Set fallback to reflect incoming load state.
+        _fallbackState.copyWith(isLoading: _shouldFallbackLoad ? true : null),
     name: 'ComputedResourceBloc<$K,$V>.state',
   );
 
   @override
   K? get key => _key.value;
   late final _key = Computed(
-    () => _streamValue.key,
+    () => (stream.value ?? _fallbackState).key,
     name: 'ComputedResourceBloc<$K,$V>.key',
   );
 
   @override
   V? get value => _value.value;
   late final _value = Computed(
-    () => _streamValue.value,
+    () => (stream.value ?? _fallbackState).value,
     name: 'ComputedResourceBloc<$K,$V>.value',
   );
 
