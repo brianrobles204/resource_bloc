@@ -367,5 +367,60 @@ void main() {
         ]),
       );
     });
+
+    test('stream can be listened, cancelled, and listened again', () async {
+      final states = <ResourceState<String, String>>[];
+
+      final sub1 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub1.cancel();
+
+      final sub2 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub2.cancel();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.initial('key', isLoading: true),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: true, source: Source.fresh),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    test('key change while unobserved will not start load', () async {
+      final states = <ResourceState<String, String>>[];
+
+      final sub1 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub1.cancel();
+
+      updateObs(key, 'second');
+      await pumpEventQueue();
+
+      final sub2 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub2.cancel();
+
+      expect(keyCount, equals(3));
+      expect(freshCount, equals(2));
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.initial('key', isLoading: true),
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+          ResourceState<String, String>.initial('second', isLoading: true),
+          ResourceState<String, String>.withValue('second', 'second',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
   });
 }
