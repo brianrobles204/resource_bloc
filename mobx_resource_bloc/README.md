@@ -2,7 +2,7 @@
 
 *Bloc + MobX = ???*
 
-Provides tools for creating Resource Blocs whose properties work within MobX's reactivity system. 
+Create resource blocs whose properties work within MobX's reactivity system. 
 
 ## Basics
 
@@ -25,3 +25,7 @@ TO FOLLOW
 ## Features and bugs
 
 TO FOLLOW
+
+----
+
+This library is still under active development. Use at your own risk!
