@@ -18,6 +18,6 @@ dev_dependencies:
 dependency_overrides:
   mobx:
     git: 
-      url: git@github.com:brianrobles204/mobx.dart.git
-      ref: observable_stream_listen_updates
+      url: https://github.com/mobxjs/mobx.dart.git
+      ref: d3c65a6d6762b3073148025ebe959f18f8977a6c
       path: mobx
