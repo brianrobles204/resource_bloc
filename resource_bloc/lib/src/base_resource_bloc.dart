@@ -47,13 +47,26 @@ abstract class BaseResourceBloc<K extends Object, V>
     this.initialValue,
   })  : initialKey = initialState.key,
         super(initialState) {
-    _onSequential<KeyUpdate<K>>(_onKeyUpdate);
-    _onSequential<KeyError>(_onKeyError);
-    _onSequential<Reload>(_onReload);
-    _onSequential<ValueUpdate<K, V>>(_onValueUpdate);
-    _onSequential<ErrorUpdate>(_onErrorUpdate);
-    _onSequential<ResourceAction>(_onResourceAction);
-    _onSequential<TruthSourceUpdate>(_onTruthSourceUpdate);
+    on<ResourceEvent>(
+      (event, emit) async {
+        if (event is KeyUpdate<K>) {
+          await _onKeyUpdate(event, emit);
+        } else if (event is KeyError) {
+          await _onKeyError(event, emit);
+        } else if (event is Reload) {
+          await _onReload(event, emit);
+        } else if (event is ValueUpdate<K, V>) {
+          await _onValueUpdate(event, emit);
+        } else if (event is ErrorUpdate) {
+          await _onErrorUpdate(event, emit);
+        } else if (event is ResourceAction) {
+          await _onResourceAction(event, emit);
+        } else if (event is TruthSourceUpdate) {
+          await _onTruthSourceUpdate(event, emit);
+        }
+      },
+      transformer: (events, mapper) => events.asyncExpand(mapper), // sequential
+    );
 
     if (initialKey != null) {
       _setUpTruthSubscription(initialKey!);
@@ -176,28 +189,6 @@ abstract class BaseResourceBloc<K extends Object, V>
         source: Source.fresh,
       );
     }
-  }
-
-  final _eventQueue = BehaviorSubject<List<Object>>.seeded([], sync: true);
-
-  /// Implementation of [on] that processes all events sequentially, even
-  /// between different types of events. Similar to the original bloc behavior.
-  void _onSequential<E extends ResourceEvent>(
-    EventHandler<E, ResourceState<K, V>> handler,
-  ) {
-    final EventHandler<E, ResourceState<K, V>> _handler = (event, emit) async {
-      final queueKey = Object();
-      _eventQueue.value = [..._eventQueue.value, queueKey];
-      await _eventQueue.firstWhere((queue) => queue.first == queueKey);
-      try {
-        await handler(event, emit);
-      } finally {
-        assert(_eventQueue.value.first == queueKey);
-        _eventQueue.value = _eventQueue.value.sublist(1);
-      }
-    };
-
-    on<E>(_handler);
   }
 
   StreamSubscription<V>? _truthSubscription;
@@ -506,7 +497,6 @@ abstract class BaseResourceBloc<K extends Object, V>
     await _freshSource.close();
     await _actionSource.close();
     await _valueLock.close();
-    await _eventQueue.close();
     return super.close();
   }
 }
