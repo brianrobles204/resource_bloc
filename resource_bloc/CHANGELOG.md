@@ -1,4 +1,4 @@
-## 0.1.0-dev.1 - 0.1.0-dev.3
+## 0.1.0-dev.1 - 0.1.0-dev.4
 
 - Initial release of Resource Bloc
   - A specialized Bloc for managing data backed by both local and remote sources.
