@@ -19,7 +19,7 @@ class ActionHandlerRef<A extends ResourceAction, V> {
   });
 
   final ActionHandler<A, V> handler;
-  final EventTransformer<ResourceAction>? transformer;
+  final EventTransformer<A>? transformer;
   final CancelCallback<V>? onCancel;
 
   Type get actionType => A;

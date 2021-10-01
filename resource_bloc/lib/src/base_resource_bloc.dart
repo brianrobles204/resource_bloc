@@ -95,7 +95,7 @@ abstract class BaseResourceBloc<K extends Object, V>
 
   void onAction<A extends ResourceAction>(
     ActionHandler<A, V> handler, {
-    EventTransformer<ResourceAction>? transformer,
+    EventTransformer<A>? transformer,
     CancelCallback<V>? onCancel,
   }) {
     assert(
