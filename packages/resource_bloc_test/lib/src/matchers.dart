@@ -113,34 +113,49 @@ Matcher isStateWith({
 class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   _ResourceStateMatcher(
     this.isLoading,
-    this.keyMatcher,
-    this.valueMatcher,
-    this.errorMatcher,
+    Object? keyMatcher,
+    Object? valueMatcher,
+    Object? errorMatcher,
     this.source,
     this.isStrictType,
-  );
+  )   : keyMatcher = keyMatcher != null ? wrapMatcher(keyMatcher) : null,
+        valueMatcher = valueMatcher != null ? wrapMatcher(valueMatcher) : null,
+        errorMatcher = errorMatcher != null ? wrapMatcher(errorMatcher) : null;
 
   final bool? isLoading;
-  final Object? keyMatcher;
-  final Object? valueMatcher;
-  final Object? errorMatcher;
+  final Matcher? keyMatcher;
+  final Matcher? valueMatcher;
+  final Matcher? errorMatcher;
   final Source? source;
   final bool isStrictType;
 
   bool get _isSnapshotMatcher => (keyMatcher == null || keyMatcher == isNull);
 
   bool _isValidState(StateSnapshot item, Map matchState) {
+    final keyState = {}, valueState = {}, errorState = {};
+
     final isValidLoading = isLoading == null || item.isLoading == isLoading;
-    final isValidKey = keyMatcher == null ||
-        (item is ResourceState &&
-            wrapMatcher(keyMatcher).matches(item.key, matchState)) ||
-        (item is! ResourceState && keyMatcher == isNull); // for strict snapshot
-    final isValidValue = valueMatcher == null ||
-        wrapMatcher(valueMatcher).matches(item.value, matchState);
-    final isValidError = errorMatcher == null ||
-        wrapMatcher(errorMatcher).matches(item.error, matchState);
+    final isValidResourceKey = keyMatcher == null ||
+        (item is ResourceState && keyMatcher!.matches(item.key, keyState));
+    final isValidSnapshotKey = _isSnapshotMatcher && item is! ResourceState;
+    final isValidKey = isValidResourceKey || isValidSnapshotKey;
+    final isValidValue =
+        valueMatcher == null || valueMatcher!.matches(item.value, valueState);
+    final isValidError =
+        errorMatcher == null || errorMatcher!.matches(item.error, errorState);
     final isValidSource =
         source == null || (item.hasValue && item.requireSource == source);
+
+    addStateInfo(matchState, {
+      'loadingMismatch': !isValidLoading,
+      'keyMismatch': !isValidKey,
+      'valueMismatch': !isValidValue,
+      'errorMismatch': !isValidError,
+      'sourceMismatch': !isValidSource,
+      'keyState': keyState,
+      'valueState': valueState,
+      'errorState': errorState,
+    });
 
     return isValidLoading &&
         isValidKey &&
@@ -164,18 +179,23 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
         isTypedSnapshot) {
       return _isValidState(item, matchState);
     } else {
+      addStateInfo(matchState, {'typeMismatch': true});
       return false;
     }
   }
 
-  @override
-  Description describe(Description description) {
+  String get _typeDescription {
     final classPart = _isSnapshotMatcher ? 'StateSnapshot' : 'ResourceState';
 
     final genericText = _isSnapshotMatcher ? '<$V>' : '<$K, $V>';
     final genericPart = isStrictType ? genericText : '';
 
-    description.add('$classPart$genericPart(');
+    return '$classPart$genericPart';
+  }
+
+  @override
+  Description describe(Description description) {
+    description.add('$_typeDescription(');
 
     void addAll(Iterable<Iterable<Object?>> lines) {
       var shouldSeparate = false;
@@ -196,14 +216,110 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
 
     addAll([
       if (isLoading != null) ['isLoading=', isLoading],
-      if (keyMatcher != null) ['key=', wrapMatcher(keyMatcher)],
-      if (valueMatcher != null) ['value=', wrapMatcher(valueMatcher)],
+      if (keyMatcher != null) ['key=', keyMatcher],
+      if (valueMatcher != null) ['value=', valueMatcher],
       if (source != null) ['source=<$source>'],
-      if (errorMatcher != null) ['error=', wrapMatcher(errorMatcher)],
+      if (errorMatcher != null) ['error=', errorMatcher],
     ]);
 
     description.add(')');
 
     return description;
+  }
+
+  @override
+  Description describeMismatch(
+    dynamic item,
+    Description mismatchDescription,
+    Map matchState,
+    bool verbose,
+  ) {
+    if ((matchState['typeMismatch'] ?? false)) {
+      return mismatchDescription.add('is not an instance of $_typeDescription');
+    }
+
+    item as StateSnapshot;
+
+    final mismatches = [
+      'loadingMismatch',
+      'keyMismatch',
+      'valueMismatch',
+      'errorMismatch',
+      'sourceMismatch',
+    ];
+
+    final mismatchCount =
+        mismatches.where((mismatch) => matchState[mismatch]).length;
+    var count = 0;
+    var hadLoadingMismatch = false;
+    void add({
+      required String ifFirst,
+      String? ifSucceeding,
+      String? ifLast,
+      String? ifLastAfterLoading,
+    }) {
+      if (count == 0) {
+        mismatchDescription.add(ifFirst);
+      } else if (count < mismatchCount - 1) {
+        mismatchDescription.add(ifSucceeding ?? ifLast ?? ifFirst);
+      } else if (hadLoadingMismatch && count == 1) {
+        mismatchDescription
+            .add(ifLastAfterLoading ?? ifLast ?? ifSucceeding ?? ifFirst);
+      } else {
+        mismatchDescription.add(ifLast ?? ifSucceeding ?? ifFirst);
+      }
+      count++;
+    }
+
+    if (matchState['loadingMismatch'] ?? false) {
+      add(ifFirst: item.isLoading ? 'is loading' : 'is not loading');
+      hadLoadingMismatch = true;
+    }
+
+    if (matchState['keyMismatch'] ?? false) {
+      item as ResourceState;
+      add(
+        ifFirst: 'has a key that ',
+        ifSucceeding: ', with a key which ',
+        ifLast: ', and a key which ',
+        ifLastAfterLoading: ' with a key which ',
+      );
+      keyMatcher!.describeMismatch(
+          item.key, mismatchDescription, matchState['keyState'], verbose);
+    }
+
+    if (matchState['valueMismatch'] ?? false) {
+      add(
+        ifFirst: 'has a value that ',
+        ifSucceeding: ', with a value which ',
+        ifLast: ', and a value which ',
+        ifLastAfterLoading: ' with a value which ',
+      );
+      valueMatcher!.describeMismatch(
+          item.value, mismatchDescription, matchState['valueState'], verbose);
+    }
+
+    if (matchState['errorMismatch'] ?? false) {
+      add(
+        ifFirst: 'has an error that ',
+        ifSucceeding: ', with an error which ',
+        ifLast: ', and an error which ',
+        ifLastAfterLoading: ' with an error which ',
+      );
+      errorMatcher!.describeMismatch(
+          item.error, mismatchDescription, matchState['errorState'], verbose);
+    }
+
+    if (matchState['sourceMismatch'] ?? false) {
+      final source =
+          item.source == Source.fresh ? 'fresh source' : 'cache source';
+      add(
+        ifFirst: 'has a $source',
+        ifLast: ', and a $source',
+        ifLastAfterLoading: ' with a $source',
+      );
+    }
+
+    return mismatchDescription;
   }
 }
