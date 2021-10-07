@@ -132,7 +132,7 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
     final isValidKey = keyMatcher == null ||
         (item is ResourceState &&
             wrapMatcher(keyMatcher).matches(item.key, matchState)) ||
-        (item is StateSnapshot && keyMatcher == isNull);
+        (item is! ResourceState && keyMatcher == isNull); // for strict snapshot
     final isValidValue = valueMatcher == null ||
         wrapMatcher(valueMatcher).matches(item.value, matchState);
     final isValidError = errorMatcher == null ||
