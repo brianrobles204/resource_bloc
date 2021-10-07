@@ -1,6 +1,84 @@
 import 'package:resource_bloc/resource_bloc.dart';
 import 'package:test/test.dart';
 
+/// A matcher that matches a resource state that is loading and all other
+/// properties (key, value, source, error) are null.
+Matcher isEmptyLoadingState = isInitialLoadingState(isNull);
+
+/// A matcher that matches a resource state that is not loading and all other
+/// properties (key, value, source, error) are null.
+Matcher isEmptyNonLoadingState = isInitialNonLoadingState(isNull);
+
+/// A matcher that matches a resource state that is loading, where the key
+/// matches the given key matcher, and value & error are null
+Matcher isInitialLoadingState(Object key) =>
+    isLoadingStateWith(key: key, value: isNull, error: isNull);
+
+/// A matcher that matches a resource state that is not loading, where
+/// the key matches the given key matcher, and value & error are null
+Matcher isInitialNonLoadingState(Object key) =>
+    isNonLoadingStateWith(key: key, value: isNull, error: isNull);
+
+/// Convenience matcher that matches a resource state that is loading, with the
+/// given value and source.
+///
+/// Optional key & error matchers can also be provided
+Matcher isLoadingWithValue(
+  Object? value,
+  Source source, {
+  Object? key,
+  Object? error,
+}) =>
+    isLoadingStateWith(key: key, value: value, source: source, error: error);
+
+/// Convenience matcher that matches a resource state that is not loading, with
+/// the given value & source.
+///
+/// Optional key & error matchers can also be provided
+Matcher isDoneWithValue(
+  Object? value,
+  Source source, {
+  Object? key,
+  Object? error,
+}) =>
+    isNonLoadingStateWith(key: key, value: value, source: source, error: error);
+
+/// Matcher that matches a resource state that is loading.
+///
+/// Matchers for other properties can also be provided.
+Matcher isLoadingStateWith({
+  Object? key,
+  Object? value,
+  Object? error,
+  Source? source,
+}) =>
+    isStateWith(
+      isLoading: true,
+      key: key,
+      value: value,
+      error: error,
+      source: source,
+    );
+
+/// Matcher that matches a resource state that is not loading.
+///
+/// Matchers for other properties can also be provided.
+Matcher isNonLoadingStateWith({
+  Object? key,
+  Object? value,
+  Object? error,
+  Source? source,
+}) =>
+    isStateWith(
+      isLoading: false,
+      key: key,
+      value: value,
+      error: error,
+      source: source,
+    );
+
+/// Matcher that matches a [StateSnapshot] that is strictly of the provided
+/// generic value type.
 Matcher isSnapshotOf<V>({
   bool? isLoading,
   Object? value,
@@ -10,6 +88,8 @@ Matcher isSnapshotOf<V>({
     _ResourceStateMatcher<Object, V>(
         isLoading, null, value, error, source, true);
 
+/// Matcher that matches a [ResourceState] that is strictly of the provided
+/// generic key and value types.
 Matcher isStateOf<K extends Object, V>({
   bool? isLoading,
   Object? key,
@@ -19,7 +99,9 @@ Matcher isStateOf<K extends Object, V>({
 }) =>
     _ResourceStateMatcher<K, V>(isLoading, key, value, error, source, true);
 
-Matcher isStateWhere({
+/// Matcher that matches a [ResourceState] or [StateSnapshot] whose properties
+/// match all of the provided matchers.
+Matcher isStateWith({
   bool? isLoading,
   Object? key,
   Object? value,
@@ -49,7 +131,8 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
     final isValidLoading = isLoading == null || item.isLoading == isLoading;
     final isValidKey = keyMatcher == null ||
         (item is ResourceState &&
-            wrapMatcher(keyMatcher).matches(item.key, matchState));
+            wrapMatcher(keyMatcher).matches(item.key, matchState)) ||
+        (item is StateSnapshot && keyMatcher == isNull);
     final isValidValue = valueMatcher == null ||
         wrapMatcher(valueMatcher).matches(item.value, matchState);
     final isValidError = errorMatcher == null ||
@@ -68,10 +151,12 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   bool matches(dynamic item, Map matchState) {
     final isResourceState = !isStrictType && item is ResourceState;
     final isTypedResourceState = isStrictType && item is ResourceState<K, V>;
-    final isSnapshot =
-        keyMatcher == null && !isStrictType && item is StateSnapshot;
-    final isTypedSnapshot =
-        keyMatcher == null && isStrictType && item is StateSnapshot<V>;
+    final isSnapshot = (keyMatcher == null || keyMatcher == isNull) &&
+        !isStrictType &&
+        item is StateSnapshot;
+    final isTypedSnapshot = (keyMatcher == null || keyMatcher == isNull) &&
+        isStrictType &&
+        item is StateSnapshot<V>;
 
     if (isResourceState ||
         isTypedResourceState ||
