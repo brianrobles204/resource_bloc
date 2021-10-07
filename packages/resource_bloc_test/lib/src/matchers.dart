@@ -127,6 +127,8 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   final Source? source;
   final bool isStrictType;
 
+  bool get _isSnapshotMatcher => (keyMatcher == null || keyMatcher == isNull);
+
   bool _isValidState(StateSnapshot item, Map matchState) {
     final isValidLoading = isLoading == null || item.isLoading == isLoading;
     final isValidKey = keyMatcher == null ||
@@ -151,12 +153,10 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   bool matches(dynamic item, Map matchState) {
     final isResourceState = !isStrictType && item is ResourceState;
     final isTypedResourceState = isStrictType && item is ResourceState<K, V>;
-    final isSnapshot = (keyMatcher == null || keyMatcher == isNull) &&
-        !isStrictType &&
-        item is StateSnapshot;
-    final isTypedSnapshot = (keyMatcher == null || keyMatcher == isNull) &&
-        isStrictType &&
-        item is StateSnapshot<V>;
+    final isSnapshot =
+        _isSnapshotMatcher && !isStrictType && item is StateSnapshot;
+    final isTypedSnapshot =
+        _isSnapshotMatcher && isStrictType && item is StateSnapshot<V>;
 
     if (isResourceState ||
         isTypedResourceState ||
@@ -170,11 +170,12 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
 
   @override
   Description describe(Description description) {
-    if (isStrictType) {
-      description.add('ResourceState<$K,$V>(');
-    } else {
-      description.add('ResourceState(');
-    }
+    final classPart = _isSnapshotMatcher ? 'StateSnapshot' : 'ResourceState';
+
+    final genericText = _isSnapshotMatcher ? '<$V>' : '<$K, $V>';
+    final genericPart = isStrictType ? genericText : '';
+
+    description.add('$classPart$genericPart(');
 
     void addAll(Iterable<Iterable<Object?>> lines) {
       var shouldSeparate = false;
