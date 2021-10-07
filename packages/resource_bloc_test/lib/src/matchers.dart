@@ -1,6 +1,15 @@
 import 'package:resource_bloc/resource_bloc.dart';
 import 'package:test/test.dart';
 
+Matcher isSnapshotOf<V>({
+  bool? isLoading,
+  Object? value,
+  Object? error,
+  Source? source,
+}) =>
+    _ResourceStateMatcher<Object, V>(
+        isLoading, null, value, error, source, true);
+
 Matcher isStateOf<K extends Object, V>({
   bool? isLoading,
   Object? key,
@@ -36,10 +45,11 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   final Source? source;
   final bool isStrictType;
 
-  bool _isValidState(ResourceState item, Map matchState) {
+  bool _isValidState(StateSnapshot item, Map matchState) {
     final isValidLoading = isLoading == null || item.isLoading == isLoading;
     final isValidKey = keyMatcher == null ||
-        wrapMatcher(keyMatcher).matches(item.key, matchState);
+        (item is ResourceState &&
+            wrapMatcher(keyMatcher).matches(item.key, matchState));
     final isValidValue = valueMatcher == null ||
         wrapMatcher(valueMatcher).matches(item.value, matchState);
     final isValidError = errorMatcher == null ||
@@ -58,8 +68,15 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
   bool matches(dynamic item, Map matchState) {
     final isResourceState = !isStrictType && item is ResourceState;
     final isTypedResourceState = isStrictType && item is ResourceState<K, V>;
+    final isSnapshot =
+        keyMatcher == null && !isStrictType && item is StateSnapshot;
+    final isTypedSnapshot =
+        keyMatcher == null && isStrictType && item is StateSnapshot<V>;
 
-    if (isResourceState || isTypedResourceState) {
+    if (isResourceState ||
+        isTypedResourceState ||
+        isSnapshot ||
+        isTypedSnapshot) {
       return _isValidState(item, matchState);
     } else {
       return false;

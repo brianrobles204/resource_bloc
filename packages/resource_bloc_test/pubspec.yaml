@@ -9,7 +9,7 @@ environment:
 
 dependencies:
   test: ^1.16.0
-  resource_bloc: ^0.1.0-dev.5
+  resource_bloc: ^0.1.0-dev.6
 
 dev_dependencies:
   lints: ^1.0.0
