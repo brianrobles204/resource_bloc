@@ -3,8 +3,8 @@ import 'package:resource_bloc_test/resource_bloc_test.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('Resource bloc matchers', () {
-    test('match empty states', () {
+  group('Resource bloc matchers match', () {
+    test('empty states', () {
       expect(
         isEmptyLoadingState.matches(
             ResourceState<int, int>.initial(null, isLoading: true), {}),
@@ -54,7 +54,7 @@ void main() {
         isFalse,
       );
     });
-    test('match initial states', () {
+    test('initial states', () {
       expect(
         isInitialLoadingState(0)
             .matches(ResourceState<int, int>.initial(0, isLoading: true), {}),
@@ -97,7 +97,7 @@ void main() {
         isFalse,
       );
     });
-    test('match keys', () {
+    test('keys', () {
       expect(
         isStateWith(key: contains(20)).matches(
           ResourceState<List<int>, int>.initial([19, 20], isLoading: true),
@@ -128,7 +128,7 @@ void main() {
         isFalse,
       );
     });
-    test('match values', () {
+    test('values', () {
       expect(
         isLoadingWithValue(100, Source.fresh).matches(
           StateSnapshot.withValue(100, isLoading: true, source: Source.fresh),
@@ -187,7 +187,7 @@ void main() {
         isFalse,
       );
     });
-    test('match errors', () {
+    test('errors', () {
       expect(
         isLoadingStateWith(error: isStateError).matches(
             StateSnapshot.withError(StateError(''), isLoading: true), {}),
@@ -201,7 +201,7 @@ void main() {
         isFalse,
       );
     });
-    test('match exact types', () {
+    test('exact types', () {
       expect(
         isStateOf<int, int>().matches(
           ResourceState.withValue(100, 100,
@@ -257,6 +257,50 @@ void main() {
         isSnapshotOf<int>().matches(StateSnapshot<String>.loading(), {}),
         isFalse,
       );
+    });
+  });
+  group('Resource bloc matchers describe', () {
+    void expectEqualDescriptions(Map<Matcher, String> cases) {
+      for (final caseEntry in cases.entries) {
+        expect(
+          caseEntry.key.describe(StringDescription()).toString(),
+          equals(caseEntry.value),
+        );
+      }
+    }
+
+    test('snapshots and resource states', () {
+      expectEqualDescriptions({
+        isStateWith(): 'StateSnapshot()',
+        isStateWith(value: 100): 'StateSnapshot(value=<100>)',
+        isStateWith(key: 100, value: 100):
+            'ResourceState(key=<100>, value=<100>)',
+        isStateWith(key: isNull): 'StateSnapshot(key=null)',
+        isStateWith(key: isA<String>()):
+            'ResourceState(key=<Instance of \'String\'>)',
+      });
+    });
+    test('generic types', () {
+      expectEqualDescriptions({
+        isStateOf<String, String>(): 'StateSnapshot<String>()',
+        isStateOf<String, String>(key: 100):
+            'ResourceState<String, String>(key=<100>)',
+        isSnapshotOf<int>(): 'StateSnapshot<int>()',
+        isSnapshotOf<int>(isLoading: true):
+            'StateSnapshot<int>(isLoading=<true>)',
+      });
+    });
+    test('properties', () {
+      expectEqualDescriptions({
+        isStateWith(isLoading: true): 'StateSnapshot(isLoading=<true>)',
+        isStateWith(key: 100): 'ResourceState(key=<100>)',
+        isStateWith(value: 'x'): 'StateSnapshot(value=\'x\')',
+        isStateWith(source: Source.cache):
+            'StateSnapshot(source=<Source.cache>)',
+        isStateWith(error: 5.0): 'StateSnapshot(error=<5.0>)',
+        isStateWith(isLoading: false, value: 100):
+            'StateSnapshot(isLoading=<false>, value=<100>)',
+      });
     });
   });
 }

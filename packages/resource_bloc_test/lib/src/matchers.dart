@@ -184,18 +184,22 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
           description.add(', ');
         }
         for (final value in line) {
-          description.addDescriptionOf(value);
+          if (value is String) {
+            description.add(value);
+          } else {
+            description.addDescriptionOf(value);
+          }
         }
         shouldSeparate = true;
       }
     }
 
     addAll([
-      if (isLoading != null) ['isLoading=$isLoading'],
-      if (keyMatcher != null) ['key=', keyMatcher],
-      if (valueMatcher != null) ['value=', valueMatcher],
-      if (source != null) ['source=$source'],
-      if (errorMatcher != null) ['error=', errorMatcher],
+      if (isLoading != null) ['isLoading=', isLoading],
+      if (keyMatcher != null) ['key=', wrapMatcher(keyMatcher)],
+      if (valueMatcher != null) ['value=', wrapMatcher(valueMatcher)],
+      if (source != null) ['source=<$source>'],
+      if (errorMatcher != null) ['error=', wrapMatcher(errorMatcher)],
     ]);
 
     description.add(')');
