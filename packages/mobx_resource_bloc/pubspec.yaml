@@ -8,16 +8,9 @@ environment:
 
 dependencies:
   bloc: ^7.2.0-dev.3
-  mobx: ^2.0.4
+  mobx: ^2.0.5
   resource_bloc: ^0.1.0-dev.5
 
 dev_dependencies:
   lints: ^1.0.1
   test: ^1.16.0
-
-dependency_overrides:
-  mobx:
-    git: 
-      url: https://github.com/mobxjs/mobx.dart.git
-      ref: d3c65a6d6762b3073148025ebe959f18f8977a6c
-      path: mobx
