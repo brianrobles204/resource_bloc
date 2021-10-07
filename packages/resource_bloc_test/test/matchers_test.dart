@@ -187,5 +187,76 @@ void main() {
         isFalse,
       );
     });
+    test('match errors', () {
+      expect(
+        isLoadingStateWith(error: isStateError).matches(
+            StateSnapshot.withError(StateError(''), isLoading: true), {}),
+        isTrue,
+      );
+      expect(
+        isLoadingStateWith(error: isStateError).matches(
+          StateSnapshot.withValue(100, source: Source.cache, isLoading: true),
+          {},
+        ),
+        isFalse,
+      );
+    });
+    test('match exact types', () {
+      expect(
+        isStateOf<int, int>().matches(
+          ResourceState.withValue(100, 100,
+              isLoading: true, source: Source.cache),
+          {},
+        ),
+        isTrue,
+      );
+      expect(
+        isStateOf<int, int>().matches(
+          ResourceState<int, int>.initial(null, isLoading: false),
+          {},
+        ),
+        isTrue,
+      );
+      expect(
+        isStateOf<int, int>().matches(
+          ResourceState.initial(100, isLoading: false),
+          {},
+        ),
+        isFalse,
+        reason: 'should not match inferred dynamic value type',
+      );
+      expect(
+        isStateOf<int, int>().matches(
+          ResourceState<String, String>.initial(null, isLoading: false),
+          {},
+        ),
+        isFalse,
+      );
+
+      expect(
+        isSnapshotOf<int>().matches(
+          StateSnapshot.withValue(100, source: Source.cache, isLoading: true),
+          {},
+        ),
+        isTrue,
+      );
+      expect(
+        isSnapshotOf<int>().matches(StateSnapshot<int>.loading(), {}),
+        isTrue,
+      );
+      expect(
+        isSnapshotOf<int>().matches(
+          ResourceState<String, int>.withValue('test', 100,
+              isLoading: true, source: Source.fresh),
+          {},
+        ),
+        isTrue,
+      );
+      expect(isSnapshotOf<int>().matches(StateSnapshot.loading(), {}), isFalse);
+      expect(
+        isSnapshotOf<int>().matches(StateSnapshot<String>.loading(), {}),
+        isFalse,
+      );
+    });
   });
 }
