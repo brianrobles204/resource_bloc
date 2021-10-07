@@ -7,9 +7,9 @@ environment:
   sdk: '>=2.12.0 <3.0.0'
 
 dependencies:
-  bloc: ^7.2.0-dev.3
+  bloc: ^7.2.1
   mobx: ^2.0.5
-  resource_bloc: ^0.1.0-dev.5
+  resource_bloc: ^0.1.0-dev.6
 
 dev_dependencies:
   lints: ^1.0.1
