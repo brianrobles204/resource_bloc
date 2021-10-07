@@ -1,0 +1,15 @@
+name: resource_bloc_test
+description: Tools for testing resource blocs.
+version: 0.1.0-dev.1
+homepage: https://github.com/brianrobles204/resource_bloc
+
+environment:
+  sdk: '>=2.14.3 <3.0.0'
+
+
+dependencies:
+  test: ^1.16.0
+  resource_bloc: ^0.1.0-dev.5
+
+dev_dependencies:
+  lints: ^1.0.0

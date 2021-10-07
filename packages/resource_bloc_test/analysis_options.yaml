@@ -1,0 +1,7 @@
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    always_declare_return_types : true
+    prefer_single_quotes : true
+    prefer_function_declarations_over_variables: false
