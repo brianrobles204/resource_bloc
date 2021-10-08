@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:mobx/mobx.dart';
 import 'package:mobx_resource_bloc/mobx_resource_bloc.dart';
+import 'package:mobx_resource_bloc/src/computed_resource_bloc.dart';
 import 'package:resource_bloc/resource_bloc.dart';
 import 'package:test/test.dart';
 
@@ -15,6 +16,7 @@ void main() {
     late FreshSource<String, String> freshSourceCallback;
     final Map<String, StreamController<String>> truthDB = {};
     late TruthSource<String, String> truthSource;
+    late OnObservePolicy defaultOnObservePolicy;
 
     StreamController<String> getTruthSource(String key) {
       return (truthDB[key] ??= StreamController.broadcast());
@@ -56,9 +58,11 @@ void main() {
         freshSource: freshSource,
         truthSource: truthSource,
       );
+      defaultOnObservePolicy = ComputedResourceBloc.defaultOnObservePolicy;
     });
 
     tearDown(() async {
+      ComputedResourceBloc.defaultOnObservePolicy = defaultOnObservePolicy;
       await bloc.close();
       await Future.wait(truthDB.values.map((controller) => controller.close()));
     });
@@ -419,6 +423,85 @@ void main() {
           ResourceState<String, String>.initial('second', isLoading: true),
           ResourceState<String, String>.withValue('second', 'second',
               isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    test('reloadIfCached policy will not reload if fresh', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadIfCached;
+      bloc.reload();
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+
+      final dispose = autorun((_) => states.add(bloc.state));
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
+    test('reloadIfEmpty policy will not reload if fresh', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadIfEmpty;
+      bloc.reload();
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+
+      final dispose = autorun((_) => states.add(bloc.state));
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.withValue('key', 'key',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+    test('reloadIfEmpty policy will not reload if cached', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadIfEmpty;
+      getTruthSource('key').add('truth');
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+
+      final dispose = autorun((_) => states.add(bloc.state));
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.withValue('key', 'truth',
+              isLoading: false, source: Source.cache),
+        ]),
+      );
+    });
+
+    test('reloadNever policy will not reload if empty', () async {
+      ComputedResourceBloc.defaultOnObservePolicy = OnObservePolicy.reloadNever;
+
+      final states = <ResourceState<String, String>>[];
+
+      final dispose = autorun((_) => states.add(bloc.state));
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState<String, String>.initial('key', isLoading: false),
         ]),
       );
     });

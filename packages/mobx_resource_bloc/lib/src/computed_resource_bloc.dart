@@ -45,14 +45,25 @@ abstract class ComputedResourceBloc<K extends Object, V>
   ComputedResourceBloc({
     required KeyCallback<K> key,
     InitialValue<K, V>? initialValue,
-  }) : super(key: key, initialValue: initialValue);
+    OnObservePolicy? onObservePolicy,
+  })  : _onObservePolicy = onObservePolicy,
+        super(key: key, initialValue: initialValue);
 
   factory ComputedResourceBloc.from({
     required KeyCallback<K> key,
     required FreshSource<K, V> freshSource,
     required TruthSource<K, V> truthSource,
     InitialValue<K, V>? initialValue,
+    OnObservePolicy? onObservePolicy,
   }) = CallbackComputedResourceBloc;
+
+  static OnObservePolicy defaultOnObservePolicy = OnObservePolicy.reloadAlways;
+
+  final OnObservePolicy? _onObservePolicy;
+
+  @override
+  OnObservePolicy get onObservePolicy =>
+      _onObservePolicy ?? defaultOnObservePolicy;
 }
 
 class CallbackComputedResourceBloc<K extends Object, V>
@@ -62,7 +73,12 @@ class CallbackComputedResourceBloc<K extends Object, V>
     required this.freshSource,
     required this.truthSource,
     InitialValue<K, V>? initialValue,
-  }) : super(key: key, initialValue: initialValue);
+    OnObservePolicy? onObservePolicy,
+  }) : super(
+          key: key,
+          initialValue: initialValue,
+          onObservePolicy: onObservePolicy,
+        );
 
   @override
   final FreshSource<K, V> freshSource;
