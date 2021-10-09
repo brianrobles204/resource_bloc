@@ -57,7 +57,8 @@ abstract class ComputedResourceBloc<K extends Object, V>
     OnObservePolicy? onObservePolicy,
   }) = CallbackComputedResourceBloc;
 
-  static OnObservePolicy defaultOnObservePolicy = OnObservePolicy.reloadAlways;
+  static OnObservePolicy defaultOnObservePolicy =
+      OnObservePolicy.reloadIfCached;
 
   final OnObservePolicy? _onObservePolicy;
 
