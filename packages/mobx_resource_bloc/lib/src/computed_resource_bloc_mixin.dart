@@ -1,6 +1,8 @@
 import 'package:mobx/mobx.dart';
-import 'package:mobx_resource_bloc/src/autorun_while_active_stream.dart';
 import 'package:resource_bloc/resource_bloc.dart';
+
+import 'autorun_while_active_stream.dart';
+import 'do_stream_transformer.dart';
 
 typedef KeyCallback<K> = K Function();
 
@@ -66,6 +68,12 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
 
   var _isKeyUpdateRunning = false;
 
+  var _hasStreamValue = false;
+  ResourceState<K, V> get _streamValue {
+    final streamValue = stream.value; // read unconditionally
+    return _hasStreamValue ? streamValue! : super.state;
+  }
+
   @override
   ObservableStream<ResourceState<K, V>> get stream => _stream ??= super
       .stream
@@ -73,10 +81,12 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
         (_) => keyUpdateAutorun(),
         onUpdate: (isRunning) => _isKeyUpdateRunning = isRunning,
       )
+      .doOn(
+        onData: (_) => _hasStreamValue = true,
+        onCancel: () => _hasStreamValue = false,
+      )
       .asObservable(name: 'ComputedResourceBloc<$K,$V>.stream');
   ObservableStream<ResourceState<K, V>>? _stream;
-
-  ResourceState<K, V> get _fallbackState => super.state;
 
   bool get _shouldFallbackLoad =>
       _isKeyUpdateRunning &&
@@ -97,25 +107,25 @@ mixin ComputedResourceBlocMixin<K extends Object, V> on BaseResourceBloc<K, V> {
   }
 
   late final _state = Computed(
-    () =>
-        stream.value ??
-        // If stream has no value, listening or observing stream should start a
-        // load. Set fallback to reflect incoming load state.
-        _fallbackState.copyWith(isLoading: _shouldFallbackLoad ? true : null),
+    () => _streamValue.copyWith(
+      // If stream has no value, listening or observing stream should start
+      // a load. Reflect incoming load state in such cases.
+      isLoading: !_hasStreamValue && _shouldFallbackLoad ? true : null,
+    ),
     name: 'ComputedResourceBloc<$K,$V>.state',
   );
 
   @override
   K? get key => _key.value;
   late final _key = Computed(
-    () => (stream.value ?? _fallbackState).key,
+    () => _streamValue.key,
     name: 'ComputedResourceBloc<$K,$V>.key',
   );
 
   @override
   V? get value => _value.value;
   late final _value = Computed(
-    () => (stream.value ?? _fallbackState).value,
+    () => _streamValue.value,
     name: 'ComputedResourceBloc<$K,$V>.value',
   );
 

@@ -372,6 +372,40 @@ void main() {
       );
     });
 
+    test('can be observed after a partially completed reload', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadIfCached;
+
+      final controller = StreamController<String>.broadcast();
+      freshSourceCallback = (key) => controller.stream;
+
+      final subscription = bloc.stream.listen(null);
+      await pumpEventQueue();
+      await subscription.cancel();
+
+      expect(
+        bloc.state,
+        equals(ResourceState<String, String>.initial('key', isLoading: true)),
+      );
+
+      controller.add('fresh');
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+      final dispose = autorun((_) => states.add(bloc.state));
+
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([
+          ResourceState.withValue('key', 'fresh',
+              isLoading: false, source: Source.fresh),
+        ]),
+      );
+    });
+
     test('stream can be listened, cancelled, and listened again', () async {
       final states = <ResourceState<String, String>>[];
 
