@@ -2,3 +2,4 @@
 library resource_bloc_test;
 
 export 'src/matchers.dart';
+export 'src/utils.dart';
