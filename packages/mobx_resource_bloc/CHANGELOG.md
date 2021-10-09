@@ -1,4 +1,4 @@
-## 0.1.1-dev.1
+## 0.1.1-dev.1 - 0.1.1-dev.2
 - Added `OnObservePolicy` option to change the behavior of the bloc when observed
   - Previously, the bloc would unconditionally reload when observed (either by calling `stream.listen` or by observing its properties like `state` in a MobX reaction)
   - Now, the `onObservePolicy` property can be overriden to change the bloc's reload behavior when observed.
