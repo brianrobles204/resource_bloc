@@ -4,6 +4,7 @@ import 'package:mobx/mobx.dart';
 import 'package:mobx_resource_bloc/mobx_resource_bloc.dart';
 import 'package:mobx_resource_bloc/src/computed_resource_bloc.dart';
 import 'package:resource_bloc/resource_bloc.dart';
+import 'package:resource_bloc_test/resource_bloc_test.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -78,10 +79,7 @@ void main() {
 
       expect(freshCount, equals(0));
       expect(bloc.value, isNull);
-      expect(
-        bloc.state,
-        ResourceState<String, String>.initial('key', isLoading: false),
-      );
+      expect(bloc.state, isInitialNonLoadingState('key'));
       expect(keyCount, equals(1));
     });
 
@@ -94,9 +92,8 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
         ]),
       );
     });
@@ -105,9 +102,8 @@ void main() {
       await expectLater(
         bloc.stream,
         emitsInOrder(<dynamic>[
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
         ]),
       );
     });
@@ -132,12 +128,10 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState<String, String>.initial('second', isLoading: true),
-          ResourceState<String, String>.withValue('second', 'second',
-              isLoading: false, source: Source.fresh),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
+          isInitialLoadingState('second'),
+          isDoneWithValue('second', Source.fresh),
         ]),
       );
     });
@@ -146,26 +140,15 @@ void main() {
       expect(keyCount, equals(1));
       final subscription = bloc.stream.listen(null);
       expect(keyCount, equals(2));
-      expect(
-        bloc.state,
-        ResourceState<String, String>.initial('key', isLoading: false),
-      );
+      expect(bloc.state, isInitialNonLoadingState('key'));
 
       await pumpEventQueue();
-      expect(
-        bloc.state,
-        ResourceState<String, String>.withValue('key', 'key',
-            isLoading: false, source: Source.fresh),
-      );
+      expect(bloc.state, isDoneWithValue('key', Source.fresh));
 
       updateObs(key, 'second');
       expect(keyCount, equals(3));
       await pumpEventQueue();
-      expect(
-        bloc.state,
-        ResourceState<String, String>.withValue('second', 'second',
-            isLoading: false, source: Source.fresh),
-      );
+      expect(bloc.state, isDoneWithValue('second', Source.fresh));
 
       await subscription.cancel();
 
@@ -174,8 +157,7 @@ void main() {
       expect(keyCount, equals(3));
       expect(
         bloc.state,
-        ResourceState<String, String>.withValue('second', 'second',
-            isLoading: false, source: Source.fresh),
+        isDoneWithValue('second', Source.fresh),
         reason: 'no change since stream is no longer being listened',
       );
     });
@@ -197,14 +179,11 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState<String, String>.withError('error',
-              key: null, isLoading: false),
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
+          isKeyErrorState('error'),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
         ]),
       );
     });
@@ -241,11 +220,9 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.withError('error',
-              key: null, isLoading: false),
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
+          isKeyErrorState('error'),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
         ]),
       );
     });
@@ -259,10 +236,7 @@ void main() {
         initialValue: initialValue,
       );
 
-      expect(
-          bloc.state,
-          equals(ResourceState.withValue('key', 'init-key',
-              isLoading: false, source: Source.cache)));
+      expect(bloc.state, isDoneWithValue('init-key', Source.cache, key: 'key'));
     });
 
     test('initial value correctly reflects in stream', () async {
@@ -287,14 +261,10 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState.withValue('key', 'init-key',
-              isLoading: true, source: Source.cache),
-          ResourceState.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState.withValue('second', 'init-second',
-              isLoading: true, source: Source.cache),
-          ResourceState.withValue('second', 'second',
-              isLoading: false, source: Source.fresh),
+          isLoadingWithValue('init-key', Source.cache, key: 'key'),
+          isDoneWithValue('key', Source.fresh, key: 'key'),
+          isLoadingWithValue('init-second', Source.cache, key: 'second'),
+          isDoneWithValue('second', Source.fresh, key: 'second'),
         ]),
       );
     });
@@ -303,10 +273,7 @@ void main() {
       getTruthSource('key').add('truth');
       await pumpEventQueue();
 
-      expect(
-          bloc.state,
-          equals(ResourceState<String, String>.withValue('key', 'truth',
-              isLoading: false, source: Source.cache)));
+      expect(bloc.state, isDoneWithValue('truth', Source.cache, key: 'key'));
     });
 
     test('truth source updates reflect in stream', () async {
@@ -326,13 +293,10 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.withValue('key', 'truth',
-              isLoading: true, source: Source.cache),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState<String, String>.initial('second', isLoading: true),
-          ResourceState<String, String>.withValue('second', 'second',
-              isLoading: false, source: Source.fresh),
+          isLoadingWithValue('truth', Source.cache, key: 'key'),
+          isDoneWithValue('key', Source.fresh, key: 'key'),
+          isInitialLoadingState('second'),
+          isDoneWithValue('second', Source.fresh, key: 'second'),
         ]),
       );
     });
@@ -341,13 +305,73 @@ void main() {
       bloc.reload();
       await pumpEventQueue();
 
-      expect(
-          bloc.state,
-          equals(ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh)));
+      expect(bloc.state, isDoneWithValue('key', Source.fresh, key: 'key'));
     });
 
-    test('can be observed after an unobserved reload', () async {
+    test('can be observed after a partially completed reload', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadIfCached;
+
+      final controller = StreamController<String>.broadcast();
+      freshSourceCallback = (key) => controller.stream;
+
+      final subscription = bloc.stream.listen(null);
+      await pumpEventQueue();
+      await subscription.cancel();
+
+      expect(bloc.state, isInitialLoadingState('key'));
+
+      controller.add('fresh');
+      await pumpEventQueue();
+
+      final states = <ResourceState<String, String>>[];
+      final dispose = autorun((_) => states.add(bloc.state));
+
+      await pumpEventQueue();
+      dispose();
+
+      expect(
+        states,
+        equals([isDoneWithValue('fresh', Source.fresh)]),
+      );
+    });
+
+    test('key change while unobserved will not start load', () async {
+      final states = <ResourceState<String, String>>[];
+
+      final sub1 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub1.cancel();
+
+      updateObs(key, 'second');
+      await pumpEventQueue();
+
+      // Load not yet run, no effect on counts yet
+      expect(keyCount, equals(2));
+      expect(freshCount, equals(1));
+
+      final sub2 = bloc.stream.listen(states.add);
+      await pumpEventQueue();
+      sub2.cancel();
+
+      expect(keyCount, equals(3));
+      expect(freshCount, equals(2));
+
+      expect(
+        states,
+        equals([
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
+          isInitialLoadingState('second'),
+          isDoneWithValue('second', Source.fresh),
+        ]),
+      );
+    });
+
+    test('reloadAlways will reload after unobserved reload', () async {
+      ComputedResourceBloc.defaultOnObservePolicy =
+          OnObservePolicy.reloadAlways;
+
       bloc.reload();
       await pumpEventQueue();
 
@@ -364,79 +388,13 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState.withValue('key', 'key',
-              isLoading: true, source: Source.fresh),
-          ResourceState.withValue('key', 'key-2',
-              isLoading: false, source: Source.fresh),
+          isLoadingWithValue('key', Source.fresh),
+          isDoneWithValue('key-2', Source.fresh),
         ]),
       );
     });
 
-    test('can be observed after a partially completed reload', () async {
-      ComputedResourceBloc.defaultOnObservePolicy =
-          OnObservePolicy.reloadIfCached;
-
-      final controller = StreamController<String>.broadcast();
-      freshSourceCallback = (key) => controller.stream;
-
-      final subscription = bloc.stream.listen(null);
-      await pumpEventQueue();
-      await subscription.cancel();
-
-      expect(
-        bloc.state,
-        equals(ResourceState<String, String>.initial('key', isLoading: true)),
-      );
-
-      controller.add('fresh');
-      await pumpEventQueue();
-
-      final states = <ResourceState<String, String>>[];
-      final dispose = autorun((_) => states.add(bloc.state));
-
-      await pumpEventQueue();
-      dispose();
-
-      expect(
-        states,
-        equals([
-          ResourceState.withValue('key', 'fresh',
-              isLoading: false, source: Source.fresh),
-        ]),
-      );
-    });
-
-    test('key change while unobserved will not start load', () async {
-      final states = <ResourceState<String, String>>[];
-
-      final sub1 = bloc.stream.listen(states.add);
-      await pumpEventQueue();
-      sub1.cancel();
-
-      updateObs(key, 'second');
-      await pumpEventQueue();
-
-      final sub2 = bloc.stream.listen(states.add);
-      await pumpEventQueue();
-      sub2.cancel();
-
-      expect(keyCount, equals(3));
-      expect(freshCount, equals(2));
-
-      expect(
-        states,
-        equals([
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState<String, String>.initial('second', isLoading: true),
-          ResourceState<String, String>.withValue('second', 'second',
-              isLoading: false, source: Source.fresh),
-        ]),
-      );
-    });
-
-    test('reloadAlways will always reload, even if fresh', () async {
+    test('reloadAlways will always reload, even after multiple subs', () async {
       ComputedResourceBloc.defaultOnObservePolicy =
           OnObservePolicy.reloadAlways;
       final states = <ResourceState<String, String>>[];
@@ -452,13 +410,10 @@ void main() {
       expect(
         states,
         equals([
-          ResourceState<String, String>.initial('key', isLoading: true),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: true, source: Source.fresh),
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
+          isInitialLoadingState('key'),
+          isDoneWithValue('key', Source.fresh),
+          isLoadingWithValue('key', Source.fresh),
+          isDoneWithValue('key', Source.fresh),
         ]),
       );
     });
@@ -477,10 +432,7 @@ void main() {
 
       expect(
         states,
-        equals([
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-        ]),
+        equals([isDoneWithValue('key', Source.fresh)]),
       );
     });
 
@@ -498,10 +450,7 @@ void main() {
 
       expect(
         states,
-        equals([
-          ResourceState<String, String>.withValue('key', 'key',
-              isLoading: false, source: Source.fresh),
-        ]),
+        equals([isDoneWithValue('key', Source.fresh)]),
       );
     });
     test('reloadIfEmpty policy will not reload if cached', () async {
@@ -518,10 +467,7 @@ void main() {
 
       expect(
         states,
-        equals([
-          ResourceState<String, String>.withValue('key', 'truth',
-              isLoading: false, source: Source.cache),
-        ]),
+        equals([isDoneWithValue('truth', Source.cache)]),
       );
     });
 
@@ -536,9 +482,7 @@ void main() {
 
       expect(
         states,
-        equals([
-          ResourceState<String, String>.initial('key', isLoading: false),
-        ]),
+        equals([isInitialNonLoadingState('key')]),
       );
     });
   });

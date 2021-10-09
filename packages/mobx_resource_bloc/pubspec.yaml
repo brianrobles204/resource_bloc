@@ -14,3 +14,4 @@ dependencies:
 dev_dependencies:
   lints: ^1.0.1
   test: ^1.16.0
+  resource_bloc_test: ^0.1.0-dev.2
