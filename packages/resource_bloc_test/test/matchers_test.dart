@@ -201,6 +201,39 @@ void main() {
         isFalse,
       );
     });
+    test('key errors', () {
+      expect(
+        isKeyErrorState(isStateError).matches(
+          ResourceState<int, int>.withError(StateError(''),
+              key: null, isLoading: false),
+          {},
+        ),
+        isTrue,
+      );
+      expect(
+        isKeyErrorState(isStateError).matches(
+          ResourceState<int, int>.withError(100, key: null, isLoading: false),
+          {},
+        ),
+        isFalse,
+      );
+      expect(
+        isKeyErrorState(isStateError).matches(
+          ResourceState<int, int>.withError(StateError(''),
+              key: 100, isLoading: false),
+          {},
+        ),
+        isFalse,
+      );
+      expect(
+        isKeyErrorState(isStateError).matches(
+          ResourceState<int, int>.withError(StateError(''),
+              key: null, isLoading: true),
+          {},
+        ),
+        isFalse,
+      );
+    });
     test('exact types', () {
       expect(
         isStateOf<int, int>().matches(

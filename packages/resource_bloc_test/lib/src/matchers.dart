@@ -1,4 +1,5 @@
 import 'package:resource_bloc/resource_bloc.dart';
+import 'package:resource_bloc_test/resource_bloc_test.dart';
 import 'package:test/test.dart';
 
 /// A matcher that matches a resource state that is loading and all other
@@ -18,6 +19,11 @@ Matcher isInitialLoadingState(Object key) =>
 /// the key matches the given key matcher, and value & error are null
 Matcher isInitialNonLoadingState(Object key) =>
     isNonLoadingStateWith(key: key, value: isNull, error: isNull);
+
+/// A matcher that matches a resource state after a key error, where the key is
+/// null, there is no value, and the error matches the given error matcher
+Matcher isKeyErrorState(Object error) =>
+    isNonLoadingStateWith(key: isNull, value: isNull, error: error);
 
 /// Convenience matcher that matches a resource state that is loading, with the
 /// given value and source.
