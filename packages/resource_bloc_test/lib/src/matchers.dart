@@ -1,5 +1,4 @@
 import 'package:resource_bloc/resource_bloc.dart';
-import 'package:resource_bloc_test/resource_bloc_test.dart';
 import 'package:test/test.dart';
 
 /// A matcher that matches a resource state that is loading and all other
