@@ -276,6 +276,21 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
       hadLoadingMismatch = true;
     }
 
+    void addMismatchedDescription(
+      Matcher matcher,
+      dynamic itemProp,
+      Map matchState,
+    ) {
+      final description = matcher
+          .describeMismatch(itemProp, StringDescription(), matchState, verbose)
+          .toString();
+      if (description.isEmpty) {
+        mismatchDescription.add('is ').addDescriptionOf(itemProp);
+      } else {
+        mismatchDescription.add(description);
+      }
+    }
+
     if (matchState['keyMismatch'] ?? false) {
       item as ResourceState;
       add(
@@ -284,8 +299,7 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
         ifLast: ', and a key which ',
         ifLastAfterLoading: ' with a key which ',
       );
-      keyMatcher!.describeMismatch(
-          item.key, mismatchDescription, matchState['keyState'], verbose);
+      addMismatchedDescription(keyMatcher!, item.key, matchState['keyState']);
     }
 
     if (matchState['valueMismatch'] ?? false) {
@@ -295,8 +309,8 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
         ifLast: ', and a value which ',
         ifLastAfterLoading: ' with a value which ',
       );
-      valueMatcher!.describeMismatch(
-          item.value, mismatchDescription, matchState['valueState'], verbose);
+      addMismatchedDescription(
+          valueMatcher!, item.value, matchState['valueState']);
     }
 
     if (matchState['errorMismatch'] ?? false) {
@@ -306,18 +320,30 @@ class _ResourceStateMatcher<K extends Object, V> extends Matcher {
         ifLast: ', and an error which ',
         ifLastAfterLoading: ' with an error which ',
       );
-      errorMatcher!.describeMismatch(
-          item.error, mismatchDescription, matchState['errorState'], verbose);
+      addMismatchedDescription(
+          errorMatcher!, item.error, matchState['errorState']);
     }
 
     if (matchState['sourceMismatch'] ?? false) {
-      final source =
-          item.source == Source.fresh ? 'fresh source' : 'cache source';
-      add(
-        ifFirst: 'has a $source',
-        ifLast: ', and a $source',
-        ifLastAfterLoading: ' with a $source',
-      );
+      switch (item.source) {
+        case Source.fresh:
+        case Source.cache:
+          final source =
+              item.source == Source.fresh ? 'fresh source' : 'cache source';
+          add(
+            ifFirst: 'has a $source',
+            ifLast: ', and a $source',
+            ifLastAfterLoading: ' with a $source',
+          );
+          break;
+        case null:
+          add(
+            ifFirst: 'has no source',
+            ifLast: ', and no source',
+            ifLastAfterLoading: ' with no source',
+          );
+          break;
+      }
     }
 
     return mismatchDescription;
