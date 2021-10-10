@@ -101,6 +101,29 @@ void main() {
       bloc.reload();
     });
 
+    test('that throw will reflect as error', () async {
+      bloc.truthReadThrowable = StateError('error');
+
+      expectLater(
+        bloc.stream,
+        emitsInOrder(<dynamic>[
+          isInitialLoadingState('key'),
+          isStateWhere(error: isStateError, value: isNull, isLoading: false),
+          isStateWhere(error: isStateError, value: isNull, isLoading: true),
+          isStateWhere(error: isStateError, value: isNull, isLoading: false),
+          emitsDone,
+        ]),
+      );
+
+      bloc.key = 'key';
+      await untilDone(bloc);
+
+      bloc.reload();
+      await pumpEventQueue();
+
+      await bloc.close();
+    });
+
     test('after key update can come from seeded stream as cache', () async {
       bloc = TestResourceBloc(initialKey: 'first');
 
