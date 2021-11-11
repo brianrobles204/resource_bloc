@@ -1,6 +1,6 @@
 name: resource_bloc_test
 description: Tools for testing resource blocs.
-version: 0.1.0-dev.2
+version: 0.1.0-dev.3
 homepage: https://github.com/brianrobles204/resource_bloc
 
 environment:
