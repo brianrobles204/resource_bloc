@@ -56,6 +56,16 @@ void main() {
     });
     test('initial states', () {
       expect(
+        isInitialLoadingState()
+            .matches(ResourceState<int, int>.initial(0, isLoading: true), {}),
+        isTrue,
+      );
+      expect(
+        isInitialLoadingState()
+            .matches(ResourceState<int, int>.initial(0, isLoading: false), {}),
+        isFalse,
+      );
+      expect(
         isInitialLoadingState(0)
             .matches(ResourceState<int, int>.initial(0, isLoading: true), {}),
         isTrue,
@@ -76,6 +86,16 @@ void main() {
         isFalse,
       );
 
+      expect(
+        isInitialNonLoadingState()
+            .matches(ResourceState<int, int>.initial(0, isLoading: false), {}),
+        isTrue,
+      );
+      expect(
+        isInitialNonLoadingState()
+            .matches(ResourceState<int, int>.initial(0, isLoading: true), {}),
+        isFalse,
+      );
       expect(
         isInitialNonLoadingState(0)
             .matches(ResourceState<int, int>.initial(0, isLoading: false), {}),

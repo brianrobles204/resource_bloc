@@ -11,12 +11,12 @@ Matcher isEmptyNonLoadingState = isInitialNonLoadingState(isNull);
 
 /// A matcher that matches a resource state that is loading, where the key
 /// matches the given key matcher, and value & error are null
-Matcher isInitialLoadingState(Object key) =>
+Matcher isInitialLoadingState([Object? key]) =>
     isLoadingStateWith(key: key, value: isNull, error: isNull);
 
 /// A matcher that matches a resource state that is not loading, where
 /// the key matches the given key matcher, and value & error are null
-Matcher isInitialNonLoadingState(Object key) =>
+Matcher isInitialNonLoadingState([Object? key]) =>
     isNonLoadingStateWith(key: key, value: isNull, error: isNull);
 
 /// A matcher that matches a resource state after a key error, where the key is
