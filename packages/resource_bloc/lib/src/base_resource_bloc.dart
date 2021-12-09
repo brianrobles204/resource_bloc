@@ -168,7 +168,7 @@ abstract class BaseResourceBloc<K extends Object, V>
     if (_valueLock.value.isLocked) {
       await _valueLock.firstWhere((lock) => lock.hasValue);
       if (key == _valueLock.value.key) {
-        yield _valueLock.value.value!;
+        yield _valueLock.value.value as V;
       }
       _valueLock.value = _Lock.unlocked();
     }
