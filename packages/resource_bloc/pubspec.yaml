@@ -1,6 +1,6 @@
 name: resource_bloc
 description: Specialized Bloc for managing data backed by both local and remote sources
-version: 0.1.0-dev.6
+version: 0.1.0-dev.7
 homepage: https://github.com/brianrobles204/resource_bloc
 
 environment:
